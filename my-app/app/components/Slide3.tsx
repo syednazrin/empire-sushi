@@ -40,9 +40,14 @@ const BRAND_COLORS: { [key: string]: string } = {
   'Sushi Plus': '#8a7a9b',
 };
 
-const EMPIRE_NEON_RED = '#ff1744';
+const EMPIRE_RED = '#c62828';
 const MARKER_SIZE_EMPIRE = 24;
 const MARKER_SIZE_OTHER = 16;
+
+const MALAYSIA_BOUNDS: [[number, number], [number, number]] = [
+  [99.5, 0.8],
+  [120, 7.4],
+];
 
 export default function Slide3() {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -83,8 +88,8 @@ export default function Slide3() {
     map.current = new mapboxgl.Map({
       container,
       style: 'mapbox://styles/mapbox/light-v11',
-      center: [101.69, 4.2],
-      zoom: 6,
+      bounds: new mapboxgl.LngLatBounds(MALAYSIA_BOUNDS[0], MALAYSIA_BOUNDS[1]),
+      fitBoundsOptions: { padding: 40, maxZoom: 8 },
       attributionControl: true,
     });
 
@@ -93,6 +98,8 @@ export default function Slide3() {
     map.current.on('load', () => {
       const m = map.current;
       if (!m) return;
+
+      m.fitBounds(new mapboxgl.LngLatBounds(MALAYSIA_BOUNDS[0], MALAYSIA_BOUNDS[1]), { padding: 40, maxZoom: 8, duration: 0 });
 
       m.addSource('state-borders', {
         type: 'geojson',
@@ -147,9 +154,9 @@ export default function Slide3() {
         el.style.width = `${size}px`;
         el.style.height = `${size}px`;
         el.style.borderRadius = '50%';
-        el.style.backgroundColor = isEmpire ? EMPIRE_NEON_RED : BRAND_COLORS[store.brand] || '#999';
+        el.style.backgroundColor = isEmpire ? EMPIRE_RED : BRAND_COLORS[store.brand] || '#999';
         el.style.border = '3px solid #fff';
-        el.style.boxShadow = isEmpire ? '0 0 16px #ff1744, 0 0 28px rgba(255,23,68,0.6)' : '0 2px 6px rgba(0,0,0,0.5)';
+        el.style.boxShadow = isEmpire ? '0 2px 8px rgba(0,0,0,0.35)' : '0 2px 6px rgba(0,0,0,0.5)';
         el.style.cursor = 'pointer';
         el.style.opacity = '1';
 
@@ -268,8 +275,8 @@ export default function Slide3() {
                         style={{
                           width: isEmpire ? 16 : 13,
                           height: isEmpire ? 16 : 13,
-                          backgroundColor: isEmpire ? EMPIRE_NEON_RED : BRAND_COLORS[brand] || '#999',
-                          boxShadow: isEmpire ? '0 0 10px #ff1744' : '0 1px 3px rgba(0,0,0,0.25)',
+                          backgroundColor: isEmpire ? EMPIRE_RED : BRAND_COLORS[brand] || '#999',
+                          boxShadow: isEmpire ? '0 1px 4px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.25)',
                         }}
                       />
                       <span className="text-sm font-medium text-gray-800">{brand}</span>
@@ -317,93 +324,95 @@ export default function Slide3() {
           <p className="text-xs text-gray-500 font-light">Store counts by state and district (filtered by brand)</p>
         </div>
 
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setExpandedChart('pie')}
-          onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('pie')}
-          className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
-        >
-          <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Market share by brand</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                innerRadius={40}
-                outerRadius={70}
-                paddingAngle={2}
-                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-              >
-                {pieData.map((entry, i) => (
-                  <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_NEON_RED : entry.fill} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'Stores']} />
-            </PieChart>
-          </ResponsiveContainer>
-          <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
-        </div>
-
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setExpandedChart('bar')}
-          onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('bar')}
-          className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
-        >
-          <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Stores per district (top 12)</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
-              <XAxis type="number" stroke="#999" tick={{ fontSize: 8 }} />
-              <YAxis type="category" dataKey="district" width={80} tick={{ fontSize: 8 }} stroke="#999" />
-              <Tooltip />
-              <Bar dataKey="count" fill={EMPIRE_NEON_RED} radius={[0, 4, 4, 0]} name="Stores" />
-            </BarChart>
-          </ResponsiveContainer>
-          <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
-        </div>
-
-        {radarData.length > 0 && brands.length > 0 && (
+        <div className="grid grid-cols-2 gap-4">
           <div
             role="button"
             tabIndex={0}
-            onClick={() => setExpandedChart('radar')}
-            onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('radar')}
+            onClick={() => setExpandedChart('pie')}
+            onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('pie')}
             className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
           >
-            <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Store count by brand across states</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <RadarChart data={radarData}>
-                <PolarGrid stroke="#e5e5e5" />
-                <PolarAngleAxis dataKey="state" tick={{ fontSize: 8 }} />
-                <PolarRadiusAxis tick={{ fontSize: 7 }} />
-                {brands.map((b, i) => (
-                  <Radar
-                    key={b}
-                    name={b}
-                    dataKey={b}
-                    stroke={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
-                    fill={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
-                    fillOpacity={b === 'Empire Sushi' ? 0.45 : 0.2}
-                    strokeWidth={b === 'Empire Sushi' ? 2.5 : 1}
-                  />
-                ))}
-                <Legend wrapperStyle={{ fontSize: 8 }} iconSize={6} />
-              </RadarChart>
+            <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Market share by brand</h3>
+            <ResponsiveContainer width="100%" height={160}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={35}
+                  outerRadius={60}
+                  paddingAngle={2}
+                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                >
+                  {pieData.map((entry, i) => (
+                    <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_RED : entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'Stores']} />
+              </PieChart>
             </ResponsiveContainer>
             <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
           </div>
-        )}
 
-        <div className="bg-[#fff5f2] rounded-2xl p-3 border border-[#ffb4a2]/30">
-          <p className="text-xs font-medium text-[#ff1744] uppercase tracking-wider mb-1">Focus brand</p>
-          <p className="text-xs text-gray-700 font-light">
-            <strong className="text-[#ff1744]">Empire Sushi</strong> is highlighted on the map with a neon red, blinking marker (larger than other brands). Analytics above use store counts from the map. Use the choropleth dropdown to compare district-level Population, Income per capita, or Income.
-          </p>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setExpandedChart('bar')}
+            onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('bar')}
+            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+          >
+            <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Stores per district (top 12)</h3>
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={barData} layout="vertical" margin={{ left: 16, right: 16 }}>
+                <XAxis type="number" stroke="#999" tick={{ fontSize: 8 }} />
+                <YAxis type="category" dataKey="district" width={72} tick={{ fontSize: 8 }} stroke="#999" />
+                <Tooltip />
+                <Bar dataKey="count" fill={EMPIRE_RED} radius={[0, 4, 4, 0]} name="Stores" />
+              </BarChart>
+            </ResponsiveContainer>
+            <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
+          </div>
+
+          {radarData.length > 0 && brands.length > 0 && (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setExpandedChart('radar')}
+              onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('radar')}
+              className="col-span-2 bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+            >
+              <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Store count by brand across states</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <RadarChart data={radarData}>
+                  <PolarGrid stroke="#e5e5e5" />
+                  <PolarAngleAxis dataKey="state" tick={{ fontSize: 8 }} />
+                  <PolarRadiusAxis tick={{ fontSize: 7 }} />
+                  {brands.map((b, i) => (
+                    <Radar
+                      key={b}
+                      name={b}
+                      dataKey={b}
+                      stroke={b === 'Empire Sushi' ? EMPIRE_RED : BRAND_COLORS[b] || '#888'}
+                      fill={b === 'Empire Sushi' ? EMPIRE_RED : BRAND_COLORS[b] || '#888'}
+                      fillOpacity={b === 'Empire Sushi' ? 0.45 : 0.2}
+                      strokeWidth={b === 'Empire Sushi' ? 2.5 : 1}
+                    />
+                  ))}
+                  <Legend wrapperStyle={{ fontSize: 8 }} iconSize={6} />
+                </RadarChart>
+              </ResponsiveContainer>
+              <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
+            </div>
+          )}
+
+          <div className="col-span-2 bg-[#fff5f2] rounded-2xl p-3 border border-[#ffb4a2]/30">
+            <p className="text-xs font-medium text-[#c62828] uppercase tracking-wider mb-1">Focus brand</p>
+            <p className="text-xs text-gray-700 font-light">
+              <strong className="text-[#c62828]">Empire Sushi</strong> is highlighted on the map with a red marker (larger than other brands). Analytics above use store counts from the map. Use the choropleth dropdown to compare district-level Population, Income per capita, or Income.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -453,7 +462,7 @@ export default function Slide3() {
                       label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     >
                       {pieData.map((entry, i) => (
-                        <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_NEON_RED : entry.fill} />
+                        <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_RED : entry.fill} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'Stores']} />
@@ -466,7 +475,7 @@ export default function Slide3() {
                     <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} />
                     <YAxis type="category" dataKey="district" width={110} tick={{ fontSize: 11 }} stroke="#999" />
                     <Tooltip />
-                    <Bar dataKey="count" fill={EMPIRE_NEON_RED} radius={[0, 6, 6, 0]} name="Stores" />
+                    <Bar dataKey="count" fill={EMPIRE_RED} radius={[0, 6, 6, 0]} name="Stores" />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -481,8 +490,8 @@ export default function Slide3() {
                         key={b}
                         name={b}
                         dataKey={b}
-                        stroke={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
-                        fill={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
+                        stroke={b === 'Empire Sushi' ? EMPIRE_RED : BRAND_COLORS[b] || '#888'}
+                        fill={b === 'Empire Sushi' ? EMPIRE_RED : BRAND_COLORS[b] || '#888'}
                         fillOpacity={b === 'Empire Sushi' ? 0.45 : 0.2}
                         strokeWidth={b === 'Empire Sushi' ? 2.5 : 1}
                       />

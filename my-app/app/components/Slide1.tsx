@@ -26,7 +26,7 @@ export default function Slide1() {
         </div>
       </div>
 
-      <div className="relative z-10 w-full max-w-4xl mx-auto px-6 sm:px-10 lg:px-16 flex flex-col justify-center min-h-screen py-16 lg:py-24">
+      <div className="relative z-10 w-full max-w-4xl mx-auto px-6 sm:px-10 lg:px-16 flex flex-col justify-start min-h-screen pt-10 lg:pt-14 pb-16 lg:pb-24">
         <h1 className="font-bold text-4xl sm:text-5xl lg:text-6xl xl:text-7xl text-[#1a1a1a] leading-[1.1] tracking-tight animate-fade-slide-up opacity-0 [animation-fill-mode:forwards] slide-in-delay-1 drop-shadow-sm">
           Beyond the Menu: Evaluating Growth Viability in Quick-Service Sushi
         </h1>
