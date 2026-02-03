@@ -61,16 +61,16 @@ export default function Slide4() {
 
   return (
     <section className="slide relative min-h-screen w-full bg-[var(--bg-cream)] overflow-hidden">
-      <div className="max-w-6xl mx-auto px-6 py-12">
-        <div className="mb-6">
-          <h2 className="font-serif text-3xl text-[#1a1a1a] tracking-tight">Search by store</h2>
-          <p className="text-sm text-gray-500 mt-1">
+      <div className="max-w-6xl mx-auto px-6 py-6">
+        <div className="mb-3">
+          <h2 className="font-serif text-2xl text-[#1a1a1a] tracking-tight">Search by store</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
             This data is from Google Trends — relative search interest over time (Malaysia).
           </p>
         </div>
 
         {stores.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-4">
             {stores.map((store) => {
               const isEmpire = store === 'Empire Sushi';
               const color = isEmpire ? EMPIRE_RED : (OTHER_COLORS[store] || '#888');
@@ -78,32 +78,32 @@ export default function Slide4() {
               return (
                 <div
                   key={store}
-                  className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1"
+                  className="bg-white rounded-xl px-2.5 py-1.5 shadow-sm border border-gray-100 flex flex-row items-center gap-2 min-w-0"
                 >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: color }}
-                    />
-                    <span className="text-sm font-medium text-gray-800 truncate" title={store}>
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: color }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-medium text-gray-800 truncate block" title={store}>
                       {store}
                     </span>
+                    <span className="text-sm font-semibold" style={{ color: isEmpire ? EMPIRE_RED : undefined }}>
+                      {avg}
+                    </span>
+                    <span className="text-[10px] text-gray-500"> avg</span>
                   </div>
-                  <p className="text-xl font-semibold" style={{ color: isEmpire ? EMPIRE_RED : undefined }}>
-                    {avg}
-                  </p>
-                  <p className="text-xs text-gray-500">Avg. monthly interest</p>
                 </div>
               );
             })}
           </div>
         )}
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
           {data.length === 0 ? (
             <div className="py-16 text-center text-gray-500">No trend data available.</div>
           ) : (
-            <ResponsiveContainer width="100%" height={420}>
+            <ResponsiveContainer width="100%" height={360}>
               <LineChart data={data} margin={{ top: 10, right: 30, bottom: 20, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                 <XAxis
