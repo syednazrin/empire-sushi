@@ -41,8 +41,8 @@ const BRAND_COLORS: { [key: string]: string } = {
 };
 
 const EMPIRE_NEON_RED = '#ff1744';
-const MARKER_SIZE_EMPIRE = 26;
-const MARKER_SIZE_OTHER = 12;
+const MARKER_SIZE_EMPIRE = 24;
+const MARKER_SIZE_OTHER = 16;
 
 export default function Slide2() {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -135,13 +135,12 @@ export default function Slide2() {
         const isEmpire = store.brand === 'Empire Sushi';
         const size = isEmpire ? MARKER_SIZE_EMPIRE : MARKER_SIZE_OTHER;
         const el = document.createElement('div');
-        el.className = isEmpire ? 'store-marker empire' : 'store-marker';
         el.style.width = `${size}px`;
         el.style.height = `${size}px`;
         el.style.borderRadius = '50%';
         el.style.backgroundColor = isEmpire ? EMPIRE_NEON_RED : BRAND_COLORS[store.brand] || '#999';
-        el.style.border = isEmpire ? '3px solid #fff' : '2px solid #fff';
-        el.style.boxShadow = isEmpire ? '0 0 14px #ff1744, 0 0 24px rgba(255,23,68,0.5)' : '0 2px 4px rgba(0,0,0,0.2)';
+        el.style.border = isEmpire ? '3px solid #fff' : '3px solid #fff';
+        el.style.boxShadow = isEmpire ? '0 0 16px #ff1744, 0 0 28px rgba(255,23,68,0.6)' : '0 2px 6px rgba(0,0,0,0.3)';
         el.style.cursor = 'pointer';
 
         const popup = new mapboxgl.Popup({ offset: 14, closeButton: false }).setHTML(
@@ -251,12 +250,12 @@ export default function Slide2() {
                   return (
                     <div key={brand} className="flex items-center gap-2">
                       <span
-                        className={`inline-block rounded-full border-2 border-white flex-shrink-0 ${isEmpire ? 'store-marker empire' : ''}`}
+                        className="inline-block rounded-full border-2 border-white flex-shrink-0"
                         style={{
-                          width: isEmpire ? 14 : 10,
-                          height: isEmpire ? 14 : 10,
+                          width: isEmpire ? 16 : 13,
+                          height: isEmpire ? 16 : 13,
                           backgroundColor: isEmpire ? EMPIRE_NEON_RED : BRAND_COLORS[brand] || '#999',
-                          boxShadow: isEmpire ? '0 0 8px #ff1744' : '0 1px 2px rgba(0,0,0,0.2)',
+                          boxShadow: isEmpire ? '0 0 10px #ff1744' : '0 1px 3px rgba(0,0,0,0.25)',
                         }}
                       />
                       <span className="text-sm font-medium text-gray-800">{brand}</span>
@@ -285,16 +284,16 @@ export default function Slide2() {
 
       <div
         ref={panelRef}
-        className={`w-1/2 h-screen overflow-y-auto p-8 lg:p-10 flex flex-col gap-8 transition-all duration-700 ${panelInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+        className={`w-1/2 h-screen overflow-y-auto p-5 lg:p-6 flex flex-col gap-5 transition-all duration-700 ${panelInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
       >
-        <div className="space-y-1">
-          <h2 className="font-serif text-3xl lg:text-4xl text-[#1a1a1a] tracking-tight">Spatial &amp; brand analytics</h2>
-          <p className="text-sm text-gray-500 font-light">Store counts by state and district from map data</p>
+        <div className="space-y-0.5">
+          <h2 className="font-serif text-2xl lg:text-3xl text-[#1a1a1a] tracking-tight">Spatial &amp; brand analytics</h2>
+          <p className="text-xs text-gray-500 font-light">Store counts by state and district from map data</p>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="font-serif text-lg text-[#1a1a1a] mb-4">Market share by brand</h3>
-          <ResponsiveContainer width="100%" height={220}>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+          <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Market share by brand</h3>
+          <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie
                 data={pieData}
@@ -302,8 +301,8 @@ export default function Slide2() {
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                innerRadius={50}
-                outerRadius={80}
+                innerRadius={40}
+                outerRadius={70}
                 paddingAngle={2}
                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
               >
@@ -316,9 +315,9 @@ export default function Slide2() {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="font-serif text-lg text-[#1a1a1a] mb-4">Stores per district (top 12)</h3>
-          <ResponsiveContainer width="100%" height={260}>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+          <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Stores per district (top 12)</h3>
+          <ResponsiveContainer width="100%" height={200}>
             <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
               <XAxis type="number" stroke="#999" tick={{ fontSize: 11 }} />
               <YAxis type="category" dataKey="district" width={90} tick={{ fontSize: 10 }} stroke="#999" />
@@ -329,9 +328,9 @@ export default function Slide2() {
         </div>
 
         {radarData.length > 0 && brands.length > 0 && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <h3 className="font-serif text-lg text-[#1a1a1a] mb-4">Store count by brand across states</h3>
-            <ResponsiveContainer width="100%" height={280}>
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Store count by brand across states</h3>
+            <ResponsiveContainer width="100%" height={220}>
               <RadarChart data={radarData}>
                 <PolarGrid stroke="#e5e5e5" />
                 <PolarAngleAxis dataKey="state" tick={{ fontSize: 10 }} />
@@ -353,9 +352,9 @@ export default function Slide2() {
           </div>
         )}
 
-        <div className="bg-[#fff5f2] rounded-2xl p-5 border border-[#ffb4a2]/30">
-          <p className="text-xs font-medium text-[#ff1744] uppercase tracking-wider mb-2">Focus brand</p>
-          <p className="text-sm text-gray-700 font-light">
+        <div className="bg-[#fff5f2] rounded-2xl p-3 border border-[#ffb4a2]/30">
+          <p className="text-xs font-medium text-[#ff1744] uppercase tracking-wider mb-1">Focus brand</p>
+          <p className="text-xs text-gray-700 font-light">
             <strong className="text-[#ff1744]">Empire Sushi</strong> is highlighted on the map with a neon red, blinking marker (larger than other brands). Analytics above use store counts from the map. Use the choropleth dropdown to compare district-level Population, Income per capita, or Income.
           </p>
         </div>
