@@ -99,6 +99,29 @@ export default function Slide3() {
       bounds: new mapboxgl.LngLatBounds(MALAYSIA_BOUNDS[0], MALAYSIA_BOUNDS[1]),
       fitBoundsOptions: { padding: 40, maxZoom: 8 },
       attributionControl: true,
+      transformRequest: (url: string, resourceType?: string) => {
+        // Proxy Mapbox tile requests through our backend
+        if (url.includes('api.mapbox.com') || url.includes('tiles.mapbox.com')) {
+          // Extract tile coordinates if present
+          const tileMatch = url.match(/\/(\d+)\/(\d+)\/(\d+)(@2x)?\.[\w]+/);
+          const retina = url.includes('@2x') ? '&retina=true' : '';
+          
+          if (tileMatch) {
+            const [, z, x, y] = tileMatch;
+            return {
+              url: `/api/mapbox-proxy?z=${z}&x=${x}&y=${y}${retina}`,
+            };
+          }
+          
+          // For other Mapbox API requests, proxy through our endpoint
+          return {
+            url: `/api/mapbox-proxy?style=light-v11`,
+          };
+        }
+        
+        // Return original URL for non-Mapbox requests
+        return { url };
+      },
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
