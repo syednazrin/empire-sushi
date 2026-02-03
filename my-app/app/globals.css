@@ -47,3 +47,13 @@ body {
   50% { opacity: 0.9; transform: scale(1.15); box-shadow: 0 0 20px #ff1744, 0 0 36px rgba(255, 23, 68, 0.7); }
 }
 .store-marker.empire { animation: empire-blink 1.2s ease-in-out infinite; }
+
+/* Smaller chart text in Slide3 panel to avoid overlap */
+.slide3-panel .recharts-text,
+.slide3-panel .recharts-pie-label text,
+.slide3-panel .recharts-legend-item-text {
+  font-size: 8px !important;
+}
+.slide3-panel .recharts-legend-item {
+  margin-right: 6px;
+}

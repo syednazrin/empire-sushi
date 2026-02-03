@@ -298,7 +298,7 @@ export default function Slide3() {
 
       <div
         ref={panelRef}
-        className={`w-1/2 h-screen overflow-y-auto p-5 lg:p-6 flex flex-col gap-5 transition-all duration-700 ${panelInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+        className={`slide3-panel w-1/2 h-screen overflow-y-auto p-5 lg:p-6 flex flex-col gap-5 transition-all duration-700 ${panelInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
       >
         <div className="space-y-0.5">
           <div className="flex items-center justify-between gap-3">
@@ -358,8 +358,8 @@ export default function Slide3() {
           <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Stores per district (top 12)</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
-              <XAxis type="number" stroke="#999" tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="district" width={90} tick={{ fontSize: 10 }} stroke="#999" />
+              <XAxis type="number" stroke="#999" tick={{ fontSize: 8 }} />
+              <YAxis type="category" dataKey="district" width={80} tick={{ fontSize: 8 }} stroke="#999" />
               <Tooltip />
               <Bar dataKey="count" fill={EMPIRE_NEON_RED} radius={[0, 4, 4, 0]} name="Stores" />
             </BarChart>
@@ -379,8 +379,8 @@ export default function Slide3() {
             <ResponsiveContainer width="100%" height={220}>
               <RadarChart data={radarData}>
                 <PolarGrid stroke="#e5e5e5" />
-                <PolarAngleAxis dataKey="state" tick={{ fontSize: 10 }} />
-                <PolarRadiusAxis tick={{ fontSize: 9 }} />
+                <PolarAngleAxis dataKey="state" tick={{ fontSize: 8 }} />
+                <PolarRadiusAxis tick={{ fontSize: 7 }} />
                 {brands.map((b, i) => (
                   <Radar
                     key={b}
@@ -392,7 +392,7 @@ export default function Slide3() {
                     strokeWidth={b === 'Empire Sushi' ? 2.5 : 1}
                   />
                 ))}
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: 8 }} iconSize={6} />
               </RadarChart>
             </ResponsiveContainer>
             <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
