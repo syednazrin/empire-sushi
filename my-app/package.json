@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run convert-data && next build",
+    "convert-data": "node scripts/convert-data-to-json.js",
     "start": "next start",
     "lint": "eslint"
   },
