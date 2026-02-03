@@ -122,7 +122,7 @@ export default function Slide4() {
                 />
                 <Tooltip
                   labelFormatter={(v) => v}
-                  formatter={(value: number, name: string) => [value, name]}
+                  formatter={(value: number | undefined, name: string) => [value ?? 0, name]}
                 />
                 <Legend />
                 {stores.map((store) => {
