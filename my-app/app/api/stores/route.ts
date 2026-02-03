@@ -24,23 +24,36 @@ export type StoreRow = {
 
 function getStoreDataFolder(): string {
   const cwd = process.cwd();
+  // In Vercel, the working directory structure is different
   const candidates = [
     path.join(cwd, 'public', 'Store Location Data'),
+    path.join(cwd, '.next', 'server', 'app', 'api', 'stores', 'public', 'Store Location Data'),
     path.join(cwd, 'my-app', 'public', 'Store Location Data'),
   ];
   for (const dir of candidates) {
-    if (fs.existsSync(dir)) return dir;
+    if (fs.existsSync(dir)) {
+      console.log('Using store data folder:', dir);
+      return dir;
+    }
   }
+  console.warn('Store data folder not found, using default');
   return path.join(cwd, 'public', 'Store Location Data');
 }
 
 export async function GET() {
-  const folder = getStoreDataFolder();
-  const stores: StoreRow[] = [];
+  try {
+    const folder = getStoreDataFolder();
+    const stores: StoreRow[] = [];
 
-  for (const filename of Object.keys(BRAND_FROM_FILENAME)) {
-    const filepath = path.join(folder, filename);
-    if (!fs.existsSync(filepath)) continue;
+    console.log('Reading stores from:', folder);
+    console.log('Files in folder:', fs.existsSync(folder) ? fs.readdirSync(folder) : 'folder not found');
+
+    for (const filename of Object.keys(BRAND_FROM_FILENAME)) {
+      const filepath = path.join(folder, filename);
+      if (!fs.existsSync(filepath)) {
+        console.warn('File not found:', filepath);
+        continue;
+      }
 
     try {
       const fileBuffer = fs.readFileSync(filepath);
@@ -95,9 +108,14 @@ export async function GET() {
         stores.push({ name: name || 'Store', address, lat, lng, brand });
       }
     } catch (e) {
-      console.warn('Error reading', filename, e);
+      console.error('Error reading', filename, e);
     }
   }
 
+  console.log('Total stores loaded:', stores.length);
   return NextResponse.json(stores);
+} catch (error) {
+    console.error('API error:', error);
+    return NextResponse.json({ error: 'Failed to load stores', details: String(error) }, { status: 500 });
+  }
 }

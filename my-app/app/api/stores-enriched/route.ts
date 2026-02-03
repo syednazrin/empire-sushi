@@ -53,13 +53,19 @@ const STATE_CODE_TO_NAME: Record<string, string> = {
 
 function getStoreDataFolder(): string {
   const cwd = process.cwd();
+  // In Vercel, the working directory structure is different
   const candidates = [
     path.join(cwd, 'public', 'Store Location Data'),
+    path.join(cwd, '.next', 'server', 'app', 'api', 'stores-enriched', 'public', 'Store Location Data'),
     path.join(cwd, 'my-app', 'public', 'Store Location Data'),
   ];
   for (const dir of candidates) {
-    if (fs.existsSync(dir)) return dir;
+    if (fs.existsSync(dir)) {
+      console.log('Using store data folder:', dir);
+      return dir;
+    }
   }
+  console.warn('Store data folder not found, using default');
   return path.join(cwd, 'public', 'Store Location Data');
 }
 
@@ -67,9 +73,14 @@ async function loadStores(): Promise<Store[]> {
   const folder = getStoreDataFolder();
   const stores: Store[] = [];
 
+  console.log('Reading stores from:', folder);
+
   for (const filename of Object.keys(BRAND_FROM_FILENAME)) {
     const filepath = path.join(folder, filename);
-    if (!fs.existsSync(filepath)) continue;
+    if (!fs.existsSync(filepath)) {
+      console.warn('File not found:', filepath);
+      continue;
+    }
     try {
       const fileBuffer = fs.readFileSync(filepath);
       const wb = XLSX.read(fileBuffer, { type: 'buffer' });
@@ -117,18 +128,25 @@ async function loadStores(): Promise<Store[]> {
         stores.push({ name: name || 'Store', address, lat, lng, brand });
       }
     } catch (e) {
-      console.warn('Error reading', filename, e);
+      console.error('Error reading', filename, e);
     }
   }
+  console.log('Total stores loaded:', stores.length);
   return stores;
 }
 
 export async function GET() {
-  const stores = await loadStores();
-  const bordersPath = path.join(process.cwd(), 'public', 'State and District Border', 'malaysia.district-jakim.geojson');
-  if (!fs.existsSync(bordersPath)) {
-    return NextResponse.json(stores.map((s) => ({ ...s, state: undefined, stateName: undefined, district: undefined })));
-  }
+  try {
+    const stores = await loadStores();
+    const bordersPath = path.join(process.cwd(), 'public', 'State and District Border', 'malaysia.district-jakim.geojson');
+    
+    console.log('Borders path:', bordersPath);
+    console.log('Borders file exists:', fs.existsSync(bordersPath));
+    
+    if (!fs.existsSync(bordersPath)) {
+      console.warn('Borders file not found, returning unenriched data');
+      return NextResponse.json(stores.map((s) => ({ ...s, state: undefined, stateName: undefined, district: undefined })));
+    }
   const geojson = JSON.parse(fs.readFileSync(bordersPath, 'utf-8'));
   const features = geojson.features || [];
   const enriched: EnrichedStore[] = stores.map((store) => {
@@ -148,5 +166,10 @@ export async function GET() {
     }
     return { ...store, state: undefined, stateName: undefined, district: undefined };
   });
+  console.log('Enriched stores:', enriched.length);
   return NextResponse.json(enriched);
+} catch (error) {
+    console.error('API error:', error);
+    return NextResponse.json({ error: 'Failed to load enriched stores', details: String(error) }, { status: 500 });
+  }
 }
