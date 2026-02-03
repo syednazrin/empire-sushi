@@ -110,24 +110,14 @@ export function MapSlide({ isActive = true }: { isActive?: boolean }) {
           style={{ width: "100%", height: "100%" }}
           mapStyle="mapbox://styles/mapbox/light-v11"
           transformRequest={(url: string, resourceType?: string) => {
-            // Proxy Mapbox tile requests through our backend
-            if (url.includes('api.mapbox.com') || url.includes('tiles.mapbox.com')) {
-              const tileMatch = url.match(/\/(\d+)\/(\d+)\/(\d+)(@2x)?\.[\w]+/);
-              const retina = url.includes('@2x') ? '&retina=true' : '';
-              
-              if (tileMatch) {
-                const [, z, x, y] = tileMatch;
-                return {
-                  url: `/api/mapbox-proxy?z=${z}&x=${x}&y=${y}${retina}`,
-                };
-              }
-              
+            // Only proxy Mapbox API and tile requests
+            if (url && (url.includes('api.mapbox.com') || url.includes('tiles.mapbox.com'))) {
               return {
-                url: `/api/mapbox-proxy?style=light-v11`,
+                url: `/api/mapbox-proxy?url=${encodeURIComponent(url)}`,
               };
             }
-            
-            return { url };
+            // Return original URL for everything else
+            return { url: url || '' };
           }}
         >
           {/* Choropleth: population density */}

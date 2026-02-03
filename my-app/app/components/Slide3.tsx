@@ -100,27 +100,14 @@ export default function Slide3() {
       fitBoundsOptions: { padding: 40, maxZoom: 8 },
       attributionControl: true,
       transformRequest: (url: string, resourceType?: string) => {
-        // Proxy Mapbox tile requests through our backend
-        if (url.includes('api.mapbox.com') || url.includes('tiles.mapbox.com')) {
-          // Extract tile coordinates if present
-          const tileMatch = url.match(/\/(\d+)\/(\d+)\/(\d+)(@2x)?\.[\w]+/);
-          const retina = url.includes('@2x') ? '&retina=true' : '';
-          
-          if (tileMatch) {
-            const [, z, x, y] = tileMatch;
-            return {
-              url: `/api/mapbox-proxy?z=${z}&x=${x}&y=${y}${retina}`,
-            };
-          }
-          
-          // For other Mapbox API requests, proxy through our endpoint
+        // Only proxy Mapbox API and tile requests
+        if (url && (url.includes('api.mapbox.com') || url.includes('tiles.mapbox.com'))) {
           return {
-            url: `/api/mapbox-proxy?style=light-v11`,
+            url: `/api/mapbox-proxy?url=${encodeURIComponent(url)}`,
           };
         }
-        
-        // Return original URL for non-Mapbox requests
-        return { url };
+        // Return original URL for everything else
+        return { url: url || '' };
       },
     });
 
