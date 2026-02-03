@@ -342,7 +342,7 @@ export default function Slide2() {
                   <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_NEON_RED : entry.fill} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v: number) => [v, 'Stores']} />
+              <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'Stores']} />
             </PieChart>
           </ResponsiveContainer>
           <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
@@ -456,7 +456,7 @@ export default function Slide2() {
                         <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_NEON_RED : entry.fill} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => [v, 'Stores']} />
+                    <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'Stores']} />
                   </PieChart>
                 </ResponsiveContainer>
               )}
