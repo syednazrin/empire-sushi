@@ -1,0 +1,12 @@
+{
+  "name": "nippon-scraper",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Extract Nippon Sushi locations to Excel",
+  "scripts": {
+    "scrape": "node scrape_nippon_excel.js"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}

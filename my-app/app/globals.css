@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+:root {
+  --accent-coral: #ff6b4a;
+  --accent-coral-soft: #ff8a73;
+  --bg-peach: #fff5f2;
+  --bg-cream: #fefcf9;
+}
+
+html {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+.slide {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-slide-up {
+  animation: fadeSlideUp 0.8s ease-out forwards;
+}
+
+.slide-in-delay-1 { animation-delay: 0.1s; }
+.slide-in-delay-2 { animation-delay: 0.2s; }
+.slide-in-delay-3 { animation-delay: 0.3s; }
+.slide-in-delay-4 { animation-delay: 0.4s; }
+.slide-in-delay-5 { animation-delay: 0.5s; }
+
+@keyframes empire-blink {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 14px #ff1744, 0 0 24px rgba(255, 23, 68, 0.6); }
+  50% { opacity: 0.9; transform: scale(1.15); box-shadow: 0 0 20px #ff1744, 0 0 36px rgba(255, 23, 68, 0.7); }
+}
+.store-marker.empire { animation: empire-blink 1.2s ease-in-out infinite; }
