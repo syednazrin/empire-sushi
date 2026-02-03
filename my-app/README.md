@@ -79,6 +79,8 @@ npm start
 
 Visit [http://localhost:3000](http://localhost:3000) to view the site.
 
+**Live (Vercel):** [https://my-app-beta-coral.vercel.app](https://my-app-beta-coral.vercel.app)
+
 ## 🔑 Environment Variables
 
 The Mapbox access token is currently hardcoded in `Slide2.tsx`. For production, create a `.env.local` file:
