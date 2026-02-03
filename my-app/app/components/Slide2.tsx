@@ -336,7 +336,7 @@ export default function Slide2() {
                 innerRadius={40}
                 outerRadius={70}
                 paddingAngle={2}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
               >
                 {pieData.map((entry, i) => (
                   <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_NEON_RED : entry.fill} />
@@ -450,7 +450,7 @@ export default function Slide2() {
                       innerRadius={80}
                       outerRadius={140}
                       paddingAngle={2}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     >
                       {pieData.map((entry, i) => (
                         <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_NEON_RED : entry.fill} />
