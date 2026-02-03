@@ -24,7 +24,8 @@ import { PieChart as PieIcon, BarChart3, Radar as RadarIcon, MapPin, AlertCircle
 import { competitiveAreas, topContestedStores, isTier1District, circlePolygon } from '../utils/geo';
 import type { StoreWithCoord } from '../utils/geo';
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'pk.eyJ1IjoibXNoYW1pIiwiYSI6ImNtMGljY28zMzBqZGsycXF4MGppdmE0bWUifQ.nWArfpCw78mToZi2cN-e8w';
+// Token only used as fallback; tiles/styles are fetched via /api/mapbox-proxy (server adds real token)
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'proxy';
 
 const CHOROPLETH_METRICS = [
   { value: 'Population (k)', label: 'Population (k)' },
@@ -99,14 +100,14 @@ export default function Slide3() {
       bounds: new mapboxgl.LngLatBounds(MALAYSIA_BOUNDS[0], MALAYSIA_BOUNDS[1]),
       fitBoundsOptions: { padding: 40, maxZoom: 8 },
       attributionControl: true,
-      transformRequest: (url: string, resourceType?: string) => {
-        // Only proxy Mapbox API and tile requests
-        if (url && (url.includes('api.mapbox.com') || url.includes('tiles.mapbox.com'))) {
+      transformRequest: (url: string) => {
+        // Proxy all Mapbox requests through our server; must return absolute URL so Request() parses correctly
+        if (url && url.includes('mapbox.com')) {
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
           return {
-            url: `/api/mapbox-proxy?url=${encodeURIComponent(url)}`,
+            url: `${origin}/api/mapbox-proxy?url=${encodeURIComponent(url)}`,
           };
         }
-        // Return original URL for everything else
         return { url: url || '' };
       },
     });
@@ -206,23 +207,34 @@ export default function Slide3() {
 
   useEffect(() => {
     const m = map.current;
-    if (!m || !choroplethGeoJSON || !m.getSource) return;
-    if (m.getLayer('choropleth-fill')) m.removeLayer('choropleth-fill');
-    if (m.getSource('choropleth')) m.removeSource('choropleth');
-    m.addSource('choropleth', { type: 'geojson', data: choroplethGeoJSON });
-    const beforeId = m.getLayer('state-outline') ? 'state-outline' : undefined;
-    m.addLayer(
-      {
-        id: 'choropleth-fill',
-        type: 'fill',
-        source: 'choropleth',
-        paint: {
-          'fill-color': ['get', '_fill'],
-          'fill-opacity': 0.5,
+    if (!m || !choroplethGeoJSON) return;
+
+    const applyChoropleth = () => {
+      if (!map.current?.getSource) return;
+      const mapRef = map.current;
+      if (mapRef.getLayer('choropleth-fill')) mapRef.removeLayer('choropleth-fill');
+      if (mapRef.getSource('choropleth')) mapRef.removeSource('choropleth');
+      mapRef.addSource('choropleth', { type: 'geojson', data: choroplethGeoJSON });
+      const beforeId = mapRef.getLayer('state-outline') ? 'state-outline' : undefined;
+      mapRef.addLayer(
+        {
+          id: 'choropleth-fill',
+          type: 'fill',
+          source: 'choropleth',
+          paint: {
+            'fill-color': ['get', '_fill'],
+            'fill-opacity': 0.5,
+          },
         },
-      },
-      beforeId
-    );
+        beforeId
+      );
+    };
+
+    if (m.loaded()) {
+      applyChoropleth();
+    } else {
+      m.once('load', applyChoropleth);
+    }
   }, [choroplethGeoJSON]);
 
   useEffect(() => {
@@ -547,8 +559,8 @@ export default function Slide3() {
                 <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-coral)] shrink-0" />
                 <span className="truncate">Store count by state ({selectedBrand})</span>
               </h3>
-              <div className="aspect-square w-full">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="aspect-square w-full min-h-[120px]">
+                <ResponsiveContainer width="100%" height="100%" minHeight={120}>
                   <BarChart data={stateBarData} layout="vertical" margin={{ left: 4, right: 4, top: 0, bottom: 0 }}>
                     <XAxis type="number" stroke="#999" tick={{ fontSize: 7 }} />
                     <YAxis type="category" dataKey="state" width={44} tick={{ fontSize: 6 }} stroke="#999" />

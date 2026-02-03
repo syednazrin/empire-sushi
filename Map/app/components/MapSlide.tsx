@@ -5,7 +5,8 @@ import Map, { Source, Layer, Marker } from "react-map-gl";
 import type { MapRef } from "react-map-gl";
 import { STORES, BRANDS, BRAND_METRICS, TOP_ITEMS } from "@/lib/data";
 
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+// Tiles/styles are fetched via /api/mapbox-proxy (server adds token). Client only needs a value for SDK init.
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'proxy';
 
 // Mock choropleth: simple GeoJSON with district-like polygons and density
 const CHOROPLETH_DATA = {
@@ -85,10 +86,11 @@ export function MapSlide({ isActive = true }: { isActive?: boolean }) {
     return BRANDS.find((b) => b.id === brandId)?.color ?? "#888";
   }, []);
 
-  if (!MAPBOX_TOKEN) {
+  // If no token is set, prompt. With proxy, server needs MAPBOX_TOKEN or NEXT_PUBLIC_MAPBOX_TOKEN in .env.local
+  if (!MAPBOX_TOKEN || MAPBOX_TOKEN === 'proxy') {
     return (
       <div className="flex h-full min-h-screen w-full items-center justify-center bg-[#fafafa] text-black/60">
-        Add NEXT_PUBLIC_MAPBOX_TOKEN to .env.local
+        Add NEXT_PUBLIC_MAPBOX_TOKEN or MAPBOX_TOKEN to .env.local (used by the tile proxy on the server)
       </div>
     );
   }
@@ -109,14 +111,14 @@ export function MapSlide({ isActive = true }: { isActive?: boolean }) {
           }}
           style={{ width: "100%", height: "100%" }}
           mapStyle="mapbox://styles/mapbox/light-v11"
-          transformRequest={(url: string, resourceType?: string) => {
-            // Only proxy Mapbox API and tile requests
-            if (url && (url.includes('api.mapbox.com') || url.includes('tiles.mapbox.com'))) {
+          transformRequest={(url: string) => {
+            // Proxy all Mapbox requests; must return absolute URL so Request() parses correctly
+            if (url && url.includes('mapbox.com')) {
+              const origin = typeof window !== 'undefined' ? window.location.origin : '';
               return {
-                url: `/api/mapbox-proxy?url=${encodeURIComponent(url)}`,
+                url: `${origin}/api/mapbox-proxy?url=${encodeURIComponent(url)}`,
               };
             }
-            // Return original URL for everything else
             return { url: url || '' };
           }}
         >

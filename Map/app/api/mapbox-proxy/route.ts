@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Server-side token only — frontend requests tiles via this proxy so the token stays on the server
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || process.env.MAPBOX_TOKEN || 'pk.eyJ1IjoibXNoYW1pIiwiYSI6ImNtMGljY28zMzBqZGsycXF4MGppdmE0bWUifQ.nWArfpCw78mToZi2cN-e8w';
+// Use server-side token only — frontend requests tiles via this proxy, so token stays on server
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || process.env.MAPBOX_TOKEN || '';
 
 export async function GET(request: NextRequest) {
+  if (!MAPBOX_TOKEN) {
+    return NextResponse.json(
+      { error: 'Mapbox token not configured (NEXT_PUBLIC_MAPBOX_TOKEN or MAPBOX_TOKEN)' },
+      { status: 500 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const targetUrl = searchParams.get('url');
@@ -16,7 +23,7 @@ export async function GET(request: NextRequest) {
     }
 
     const decodedUrl = decodeURIComponent(targetUrl);
-    // Always use server token: normalize URL and set access_token so client never needs the real token
+    // Always use server token: strip any client token and append server token
     const urlObj = new URL(decodedUrl);
     urlObj.searchParams.set('access_token', MAPBOX_TOKEN);
     const urlWithToken = urlObj.toString();
@@ -31,10 +38,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Determine content type from response
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
-    
-    // Get the response data
     const data = await response.arrayBuffer();
 
     return new NextResponse(data, {
