@@ -281,49 +281,69 @@ export default function Slide3() {
 
   useEffect(() => {
     const m = map.current;
-    if (!m || !m.getSource) return;
-    if (m.getLayer('conflict-zones-fill')) m.removeLayer('conflict-zones-fill');
-    if (m.getSource('conflict-zones')) m.removeSource('conflict-zones');
-    if (showConflictZones && conflictCoords.length > 0) {
-      const features = conflictCoords.map((c) => ({
-        type: 'Feature' as const,
-        properties: {},
-        geometry: {
-          type: 'Polygon' as const,
-          coordinates: [circlePolygon(c.lng, c.lat, 1)],
-        },
-      }));
-      m.addSource('conflict-zones', { type: 'geojson', data: { type: 'FeatureCollection', features } });
-      m.addLayer({
-        id: 'conflict-zones-fill',
-        type: 'fill',
-        source: 'conflict-zones',
-        paint: { 'fill-color': '#ff6b4a', 'fill-opacity': 0.2 },
-      });
+    if (!m) return;
+
+    const apply = () => {
+      if (!m?.getSource) return;
+      if (m.getLayer('conflict-zones-fill')) m.removeLayer('conflict-zones-fill');
+      if (m.getSource('conflict-zones')) m.removeSource('conflict-zones');
+      if (showConflictZones && conflictCoords.length > 0) {
+        const features = conflictCoords.map((c) => ({
+          type: 'Feature' as const,
+          properties: {},
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [circlePolygon(c.lng, c.lat, 1)],
+          },
+        }));
+        m.addSource('conflict-zones', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+        m.addLayer({
+          id: 'conflict-zones-fill',
+          type: 'fill',
+          source: 'conflict-zones',
+          paint: { 'fill-color': '#ff6b4a', 'fill-opacity': 0.2 },
+        });
+      }
+    };
+
+    if (m.isStyleLoaded()) {
+      apply();
+    } else {
+      m.once('load', apply);
     }
   }, [showConflictZones, conflictCoords]);
 
   useEffect(() => {
     const m = map.current;
-    if (!m || !m.getSource) return;
-    if (m.getLayer('cluster-highlight-fill')) m.removeLayer('cluster-highlight-fill');
-    if (m.getSource('cluster-highlight')) m.removeSource('cluster-highlight');
-    if (highlightClusters && conflictCoords.length > 0) {
-      const features = conflictCoords.map((c) => ({
-        type: 'Feature' as const,
-        properties: {},
-        geometry: {
-          type: 'Polygon' as const,
-          coordinates: [circlePolygon(c.lng, c.lat, 1)],
-        },
-      }));
-      m.addSource('cluster-highlight', { type: 'geojson', data: { type: 'FeatureCollection', features } });
-      m.addLayer({
-        id: 'cluster-highlight-fill',
-        type: 'fill',
-        source: 'cluster-highlight',
-        paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.35 },
-      });
+    if (!m) return;
+
+    const apply = () => {
+      if (!m?.getSource) return;
+      if (m.getLayer('cluster-highlight-fill')) m.removeLayer('cluster-highlight-fill');
+      if (m.getSource('cluster-highlight')) m.removeSource('cluster-highlight');
+      if (highlightClusters && conflictCoords.length > 0) {
+        const features = conflictCoords.map((c) => ({
+          type: 'Feature' as const,
+          properties: {},
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [circlePolygon(c.lng, c.lat, 1)],
+          },
+        }));
+        m.addSource('cluster-highlight', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+        m.addLayer({
+          id: 'cluster-highlight-fill',
+          type: 'fill',
+          source: 'cluster-highlight',
+          paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.35 },
+        });
+      }
+    };
+
+    if (m.isStyleLoaded()) {
+      apply();
+    } else {
+      m.once('load', apply);
     }
   }, [highlightClusters, conflictCoords]);
 
