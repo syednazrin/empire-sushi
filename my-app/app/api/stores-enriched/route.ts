@@ -41,15 +41,11 @@ const STATE_CODE_TO_NAME: Record<string, string> = {
 
 async function loadStores(): Promise<Store[]> {
   const jsonPath = path.join(process.cwd(), 'public', 'data', 'stores.json');
-  console.log('Reading stores from JSON:', jsonPath);
+  console.log('Attempting to read stores from:', jsonPath);
   
-  if (!fs.existsSync(jsonPath)) {
-    console.error('Stores JSON file not found');
-    return [];
-  }
-  
-  const stores: Store[] = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-  console.log('Total stores loaded:', stores.length);
+  const fileContent = fs.readFileSync(jsonPath, 'utf-8');
+  const stores: Store[] = JSON.parse(fileContent);
+  console.log('Successfully loaded stores:', stores.length);
   return stores;
 }
 
@@ -58,14 +54,16 @@ export async function GET() {
     const stores = await loadStores();
     const bordersPath = path.join(process.cwd(), 'public', 'State and District Border', 'malaysia.district-jakim.geojson');
     
-    console.log('Borders path:', bordersPath);
-    console.log('Borders file exists:', fs.existsSync(bordersPath));
+    console.log('Attempting to read borders from:', bordersPath);
     
-    if (!fs.existsSync(bordersPath)) {
-      console.warn('Borders file not found, returning unenriched data');
+    let geojson;
+    try {
+      const bordersContent = fs.readFileSync(bordersPath, 'utf-8');
+      geojson = JSON.parse(bordersContent);
+    } catch (err) {
+      console.warn('Borders file not found, returning unenriched data:', err);
       return NextResponse.json(stores.map((s) => ({ ...s, state: undefined, stateName: undefined, district: undefined })));
     }
-  const geojson = JSON.parse(fs.readFileSync(bordersPath, 'utf-8'));
   const features = geojson.features || [];
   const enriched: EnrichedStore[] = stores.map((store) => {
     for (const f of features) {
@@ -86,8 +84,13 @@ export async function GET() {
   });
   console.log('Enriched stores:', enriched.length);
   return NextResponse.json(enriched);
-} catch (error) {
+  } catch (error) {
     console.error('API error:', error);
-    return NextResponse.json({ error: 'Failed to load enriched stores', details: String(error) }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ 
+      error: 'Failed to load enriched stores', 
+      details: errorMessage,
+      cwd: process.cwd()
+    }, { status: 500 });
   }
 }
