@@ -53,6 +53,9 @@ export default function Slide2() {
   const [choroplethGeoJSON, setChoroplethGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
   const [metric, setMetric] = useState('Population (k)');
   const [panelInView, setPanelInView] = useState(false);
+  const [selectedBrand, setSelectedBrand] = useState('Empire Sushi');
+  type ChartId = 'pie' | 'bar' | 'radar';
+  const [expandedChart, setExpandedChart] = useState<ChartId | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -131,7 +134,13 @@ export default function Slide2() {
       markersRef.current = [];
       const lngs = stores.map((s) => s.lng);
       const lats = stores.map((s) => s.lat);
-      stores.forEach((store) => {
+      
+      // Add non-Empire markers first, then Empire so Empire is on top
+      const nonEmpireStores = stores.filter((s) => s.brand !== 'Empire Sushi');
+      const empireStores = stores.filter((s) => s.brand === 'Empire Sushi');
+      const sortedStores = [...nonEmpireStores, ...empireStores];
+
+      sortedStores.forEach((store) => {
         const isEmpire = store.brand === 'Empire Sushi';
         const size = isEmpire ? MARKER_SIZE_EMPIRE : MARKER_SIZE_OTHER;
         const el = document.createElement('div');
@@ -139,9 +148,10 @@ export default function Slide2() {
         el.style.height = `${size}px`;
         el.style.borderRadius = '50%';
         el.style.backgroundColor = isEmpire ? EMPIRE_NEON_RED : BRAND_COLORS[store.brand] || '#999';
-        el.style.border = isEmpire ? '3px solid #fff' : '3px solid #fff';
-        el.style.boxShadow = isEmpire ? '0 0 16px #ff1744, 0 0 28px rgba(255,23,68,0.6)' : '0 2px 6px rgba(0,0,0,0.3)';
+        el.style.border = '3px solid #fff';
+        el.style.boxShadow = isEmpire ? '0 0 16px #ff1744, 0 0 28px rgba(255,23,68,0.6)' : '0 2px 6px rgba(0,0,0,0.5)';
         el.style.cursor = 'pointer';
+        el.style.opacity = '1';
 
         const popup = new mapboxgl.Popup({ offset: 14, closeButton: false }).setHTML(
           `<div style="padding:8px 12px;font-size:12px;min-width:160px;"><strong>${store.brand}</strong><br/>${store.name}<br/><span style="color:#666">${store.address || ''}</span></div>`
@@ -207,20 +217,22 @@ export default function Slide2() {
   }, {});
   const pieData = Object.entries(byBrand).map(([name, value]) => ({ name, value, fill: BRAND_COLORS[name] || '#888' }));
 
-  const byState = enriched.reduce<{ [key: string]: { [key: string]: number } }>((acc, s) => {
+  const filteredEnriched = selectedBrand === 'All Brands' ? enriched : enriched.filter((s) => s.brand === selectedBrand);
+
+  const byState = filteredEnriched.reduce<{ [key: string]: { [key: string]: number } }>((acc, s) => {
     const state = s.stateName || s.state || 'Unknown';
     if (!acc[state]) acc[state] = {};
     acc[state][s.brand] = (acc[state][s.brand] || 0) + 1;
     return acc;
   }, {});
-  const brands = Array.from(new Set(enriched.map((s) => s.brand)));
+  const brands = Array.from(new Set(filteredEnriched.map((s) => s.brand)));
   const radarData = Object.entries(byState).slice(0, 8).map(([state, counts]) => {
     const obj: { [key: string]: string | number } = { state: state.length > 12 ? state.slice(0, 12) + '…' : state };
     brands.forEach((b) => (obj[b] = counts[b] || 0));
     return obj;
   });
 
-  const byDistrict = enriched.reduce<{ [key: string]: number }>((acc, s) => {
+  const byDistrict = filteredEnriched.reduce<{ [key: string]: number }>((acc, s) => {
     const d = s.district || 'Unknown';
     acc[d] = (acc[d] || 0) + 1;
     return acc;
@@ -229,6 +241,8 @@ export default function Slide2() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 12)
     .map(([district, count]) => ({ district: district.length > 14 ? district.slice(0, 14) + '…' : district, count }));
+
+  const allBrands = Array.from(new Set(stores.map((s) => s.brand))).sort((a, b) => a === 'Empire Sushi' ? -1 : b === 'Empire Sushi' ? 1 : a.localeCompare(b));
 
   return (
     <section className="slide relative min-h-screen w-full flex bg-[var(--bg-cream)] overflow-hidden">
@@ -287,11 +301,29 @@ export default function Slide2() {
         className={`w-1/2 h-screen overflow-y-auto p-5 lg:p-6 flex flex-col gap-5 transition-all duration-700 ${panelInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
       >
         <div className="space-y-0.5">
-          <h2 className="font-serif text-2xl lg:text-3xl text-[#1a1a1a] tracking-tight">Spatial &amp; brand analytics</h2>
-          <p className="text-xs text-gray-500 font-light">Store counts by state and district from map data</p>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-serif text-2xl lg:text-3xl text-[#1a1a1a] tracking-tight">Spatial &amp; brand analytics</h2>
+            <select
+              value={selectedBrand}
+              onChange={(e) => setSelectedBrand(e.target.value)}
+              className="text-sm font-sans bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-gray-800 font-medium focus:ring-2 focus:ring-[var(--accent-coral)] focus:outline-none cursor-pointer"
+            >
+              <option value="All Brands">All Brands</option>
+              {allBrands.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-gray-500 font-light">Store counts by state and district (filtered by brand)</p>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpandedChart('pie')}
+          onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('pie')}
+          className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+        >
           <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Market share by brand</h3>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
@@ -313,9 +345,16 @@ export default function Slide2() {
               <Tooltip formatter={(v: number) => [v, 'Stores']} />
             </PieChart>
           </ResponsiveContainer>
+          <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpandedChart('bar')}
+          onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('bar')}
+          className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+        >
           <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Stores per district (top 12)</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
@@ -325,10 +364,17 @@ export default function Slide2() {
               <Bar dataKey="count" fill={EMPIRE_NEON_RED} radius={[0, 4, 4, 0]} name="Stores" />
             </BarChart>
           </ResponsiveContainer>
+          <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
         </div>
 
         {radarData.length > 0 && brands.length > 0 && (
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setExpandedChart('radar')}
+            onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('radar')}
+            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+          >
             <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Store count by brand across states</h3>
             <ResponsiveContainer width="100%" height={220}>
               <RadarChart data={radarData}>
@@ -349,6 +395,7 @@ export default function Slide2() {
                 <Legend />
               </RadarChart>
             </ResponsiveContainer>
+            <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
           </div>
         )}
 
@@ -359,6 +406,95 @@ export default function Slide2() {
           </p>
         </div>
       </div>
+
+      {/* Expanded chart overlay */}
+      {expandedChart && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setExpandedChart(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Enlarged chart"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white rounded-t-2xl">
+              <h3 className="font-serif text-xl text-[#1a1a1a]">
+                {expandedChart === 'pie' && 'Market Share by Brand'}
+                {expandedChart === 'bar' && 'Stores per District (Top 12)'}
+                {expandedChart === 'radar' && 'Store Count by Brand Across States'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setExpandedChart(null)}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)]"
+                aria-label="Close"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6" style={{ minHeight: '60vh' }}>
+              {expandedChart === 'pie' && (
+                <ResponsiveContainer width="100%" height={500}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={140}
+                      paddingAngle={2}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {pieData.map((entry, i) => (
+                        <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_NEON_RED : entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => [v, 'Stores']} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+              {expandedChart === 'bar' && (
+                <ResponsiveContainer width="100%" height={500}>
+                  <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                    <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} />
+                    <YAxis type="category" dataKey="district" width={110} tick={{ fontSize: 11 }} stroke="#999" />
+                    <Tooltip />
+                    <Bar dataKey="count" fill={EMPIRE_NEON_RED} radius={[0, 6, 6, 0]} name="Stores" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              {expandedChart === 'radar' && radarData.length > 0 && brands.length > 0 && (
+                <ResponsiveContainer width="100%" height={500}>
+                  <RadarChart data={radarData}>
+                    <PolarGrid stroke="#e5e5e5" />
+                    <PolarAngleAxis dataKey="state" tick={{ fontSize: 11 }} />
+                    <PolarRadiusAxis tick={{ fontSize: 10 }} />
+                    {brands.map((b) => (
+                      <Radar
+                        key={b}
+                        name={b}
+                        dataKey={b}
+                        stroke={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
+                        fill={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
+                        fillOpacity={b === 'Empire Sushi' ? 0.45 : 0.2}
+                        strokeWidth={b === 'Empire Sushi' ? 2.5 : 1}
+                      />
+                    ))}
+                    <Legend />
+                  </RadarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
