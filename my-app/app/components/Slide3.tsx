@@ -85,7 +85,7 @@ export default function Slide3() {
         setMenuItems(data);
         setLoading(false);
         // Select all stores by default
-        const stores = Array.from(new Set(data.map((item: MenuItem) => item.store)));
+        const stores = Array.from(new Set(data.map((item: MenuItem) => item.store))) as string[];
         setSelectedStores(new Set(stores));
       })
       .catch((err) => {
