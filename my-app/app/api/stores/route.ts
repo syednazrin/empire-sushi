@@ -22,8 +22,20 @@ export type StoreRow = {
   brand: string;
 };
 
+function getStoreDataFolder(): string {
+  const cwd = process.cwd();
+  const candidates = [
+    path.join(cwd, 'public', 'Store Location Data'),
+    path.join(cwd, 'my-app', 'public', 'Store Location Data'),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(dir)) return dir;
+  }
+  return path.join(cwd, 'public', 'Store Location Data');
+}
+
 export async function GET() {
-  const folder = path.join(process.cwd(), 'public', 'Store Location Data');
+  const folder = getStoreDataFolder();
   const stores: StoreRow[] = [];
 
   for (const filename of Object.keys(BRAND_FROM_FILENAME)) {
@@ -31,7 +43,8 @@ export async function GET() {
     if (!fs.existsSync(filepath)) continue;
 
     try {
-      const wb = XLSX.readFile(filepath);
+      const fileBuffer = fs.readFileSync(filepath);
+      const wb = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = wb.SheetNames[0];
       const ws = wb.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as (string | number)[][];
@@ -39,21 +52,42 @@ export async function GET() {
       if (rows.length < 2) continue;
 
       const headers = (rows[0] as string[]).map((h) => (h != null ? String(h).trim().toLowerCase() : ''));
-      const nameIdx = headers.findIndex((h) => h === 'name' || h === 'store');
-      const addressIdx = headers.findIndex((h) => h === 'address');
-      const coordIdx = headers.findIndex((h) => h === 'coordinates' || h === 'coordinate');
+      const nameIdx = headers.findIndex((h) => h === 'name' || h === 'store' || h === 'store name');
+      const addressIdx = headers.findIndex((h) => h === 'address' || h === 'location');
+      const coordIdx = headers.findIndex((h) => h === 'coordinates' || h === 'coordinate' || h === 'coord');
+      const latIdx = headers.findIndex((h) => h === 'lat' || h === 'latitude');
+      const lngIdx = headers.findIndex((h) => h === 'lng' || h === 'lon' || h === 'longitude');
 
       const brand = BRAND_FROM_FILENAME[filename];
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i] as (string | number)[];
-        const coordRaw = coordIdx >= 0 ? String(row[coordIdx] ?? '').trim() : '';
-        if (!coordRaw) continue;
+        let lat: number;
+        let lng: number;
 
-        const [latStr, lngStr] = coordRaw.split(/[,\s]+/);
-        const lat = parseFloat(latStr);
-        const lng = parseFloat(lngStr);
+        if (latIdx >= 0 && lngIdx >= 0) {
+          lat = parseFloat(String(row[latIdx] ?? '').trim());
+          lng = parseFloat(String(row[lngIdx] ?? '').trim());
+        } else {
+          const coordRaw = coordIdx >= 0 ? String(row[coordIdx] ?? '').trim() : '';
+          if (!coordRaw) continue;
+          const parts = coordRaw.split(/[,\s]+/).filter(Boolean);
+          if (parts.length < 2) continue;
+          const a = parseFloat(parts[0]);
+          const b = parseFloat(parts[1]);
+          if (Number.isNaN(a) || Number.isNaN(b)) continue;
+          // Malaysia: lat ~1-7, lng ~99-120. If reversed (lng,lat), swap.
+          if (a >= 99 && a <= 120 && b >= 0.5 && b <= 8) {
+            lng = a;
+            lat = b;
+          } else {
+            lat = a;
+            lng = b;
+          }
+        }
+
         if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
 
         const name = nameIdx >= 0 ? String(row[nameIdx] ?? '').trim() : '';
         const address = addressIdx >= 0 ? String(row[addressIdx] ?? '').trim() : '';

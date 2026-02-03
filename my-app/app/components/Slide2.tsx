@@ -129,6 +129,8 @@ export default function Slide2() {
     const addMarkers = () => {
       markersRef.current.forEach((mrk) => mrk.remove());
       markersRef.current = [];
+      const lngs = stores.map((s) => s.lng);
+      const lats = stores.map((s) => s.lat);
       stores.forEach((store) => {
         const isEmpire = store.brand === 'Empire Sushi';
         const size = isEmpire ? MARKER_SIZE_EMPIRE : MARKER_SIZE_OTHER;
@@ -152,6 +154,13 @@ export default function Slide2() {
           .addTo(m);
         markersRef.current.push(marker);
       });
+      if (lngs.length > 0 && lats.length > 0) {
+        const bounds = new mapboxgl.LngLatBounds(
+          [Math.min(...lngs), Math.min(...lats)],
+          [Math.max(...lngs), Math.max(...lats)]
+        );
+        m.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 1000 });
+      }
     };
 
     if (m.loaded()) {
