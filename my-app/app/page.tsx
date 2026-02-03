@@ -3,6 +3,7 @@ import Slide2 from './components/Slide2';
 import Slide3 from './components/Slide3';
 import Slide4 from './components/Slide4';
 import Slide5 from './components/Slide5';
+import Slide6 from './components/Slide6';
 import PageCounter from './components/PageCounter';
 
 export default function Home() {
@@ -13,7 +14,8 @@ export default function Home() {
       <Slide3 />
       <Slide4 />
       <Slide5 />
-      <PageCounter totalSlides={5} />
+      <Slide6 />
+      <PageCounter totalSlides={6} />
     </main>
   );
 }

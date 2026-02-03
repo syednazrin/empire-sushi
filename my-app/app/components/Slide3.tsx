@@ -1,629 +1,500 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import {
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
   ResponsiveContainer,
-  ComposedChart,
+  BarChart,
   Bar,
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
-  CartesianGrid,
-  ScatterChart,
-  Scatter,
+  PieChart,
+  Pie,
   Cell,
-  BarChart,
-  Line,
+  Legend,
 } from 'recharts';
 
-interface MenuItem {
-  store: string;
-  item: string;
-  price: number;
-  category?: string;
-}
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'pk.eyJ1IjoibXNoYW1pIiwiYSI6ImNtMGljY28zMzBqZGsycXF4MGppdmE0bWUifQ.nWArfpCw78mToZi2cN-e8w';
 
-interface BoxPlotData {
-  store: string;
-  min: number;
-  q1: number;
-  median: number;
-  q3: number;
-  max: number;
-  mean: number;
-  outliers: number[];
-  color: string;
-}
+const CHOROPLETH_METRICS = [
+  { value: 'Population (k)', label: 'Population (k)' },
+  { value: 'Income per capita', label: 'Income per Capita' },
+  { value: 'Income', label: 'Income' },
+];
 
-type ChartId = 'boxplot' | 'histogram' | 'scatter' | 'category';
-
-const STORE_COLORS: { [key: string]: string } = {
+const BRAND_COLORS: { [key: string]: string } = {
   'Empire Sushi': '#ff1744',
-  'Sushi Jiro': '#9b7a8a',
-  'Mentai Sushi': '#6b9b8a',
+  'Sushi Mentai': '#6b9b8a',
+  'Sushi King': '#8a9b6b',
+  'Nippon Sushi': '#9b8a6b',
   'Family Mart': '#a88b9c',
+  'Sushi Zanmai': '#7a9ba8',
+  'Sushi Jiro': '#9b7a8a',
+  'Sushi Plus': '#8a7a9b',
 };
 
-const calculateBoxPlotStats = (prices: number[]): Omit<BoxPlotData, 'store' | 'color'> => {
-  const sorted = [...prices].sort((a, b) => a - b);
-  const n = sorted.length;
-  
-  const q1Index = Math.floor(n * 0.25);
-  const medianIndex = Math.floor(n * 0.5);
-  const q3Index = Math.floor(n * 0.75);
-  
-  const q1 = sorted[q1Index];
-  const median = sorted[medianIndex];
-  const q3 = sorted[q3Index];
-  const iqr = q3 - q1;
-  
-  const lowerFence = q1 - 1.5 * iqr;
-  const upperFence = q3 + 1.5 * iqr;
-  
-  const outliers = sorted.filter(p => p < lowerFence || p > upperFence);
-  const validPrices = sorted.filter(p => p >= lowerFence && p <= upperFence);
-  
-  const min = validPrices[0] || sorted[0];
-  const max = validPrices[validPrices.length - 1] || sorted[sorted.length - 1];
-  const mean = prices.reduce((a, b) => a + b, 0) / n;
-  
-  return { min, q1, median, q3, max, mean, outliers };
-};
+const EMPIRE_NEON_RED = '#ff1744';
+const MARKER_SIZE_EMPIRE = 24;
+const MARKER_SIZE_OTHER = 16;
 
 export default function Slide3() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [selectedStores, setSelectedStores] = useState<Set<string>>(new Set());
-  const [highlightedItem, setHighlightedItem] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const [stores, setStores] = useState<{ name: string; address: string; lat: number; lng: number; brand: string }[]>([]);
+  const [enriched, setEnriched] = useState<{ brand: string; state?: string; stateName?: string; district?: string }[]>([]);
+  const [choroplethGeoJSON, setChoroplethGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [metric, setMetric] = useState('Population (k)');
+  const [panelInView, setPanelInView] = useState(false);
+  const [selectedBrand, setSelectedBrand] = useState('Empire Sushi');
+  type ChartId = 'pie' | 'bar' | 'radar';
   const [expandedChart, setExpandedChart] = useState<ChartId | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch('/api/menu-items')
+    fetch('/api/stores')
       .then((r) => r.json())
-      .then((data) => {
-        setMenuItems(data);
-        setLoading(false);
-        // Select all stores by default
-        const stores = Array.from(new Set(data.map((item: MenuItem) => item.store))) as string[];
-        setSelectedStores(new Set(stores));
-      })
-      .catch((err) => {
-        console.error('Error loading menu items:', err);
-        setLoading(false);
-      });
+      .then(setStores)
+      .catch(() => setStores([]));
+    fetch('/api/stores-enriched')
+      .then((r) => r.json())
+      .then((data) => setEnriched(data))
+      .catch(() => setEnriched([]));
   }, []);
 
-  const allStores = useMemo(() => {
-    return Array.from(new Set(menuItems.map((item) => item.store))).sort();
-  }, [menuItems]);
+  useEffect(() => {
+    fetch(`/api/district-choropleth?metric=${encodeURIComponent(metric)}`)
+      .then((r) => r.json())
+      .then((data) => setChoroplethGeoJSON(data))
+      .catch(() => setChoroplethGeoJSON(null));
+  }, [metric]);
 
-  const filteredItems = useMemo(() => {
-    return menuItems.filter((item) =>
-      selectedStores.size === 0 || selectedStores.has(item.store)
-    );
-  }, [menuItems, selectedStores]);
+  useEffect(() => {
+    if (!mapContainer.current) return;
+    const container = mapContainer.current;
 
-  const kpis = useMemo(() => {
-    const stats: { [store: string]: { avg: number; min: number; max: number; count: number } } = {};
-    
-    allStores.forEach((store) => {
-      const storeItems = menuItems.filter((item) => item.store === store);
-      const prices = storeItems.map((item) => item.price);
-      
-      if (prices.length > 0) {
-        stats[store] = {
-          avg: prices.reduce((a, b) => a + b, 0) / prices.length,
-          min: Math.min(...prices),
-          max: Math.max(...prices),
-          count: prices.length,
-        };
-      }
+    map.current = new mapboxgl.Map({
+      container,
+      style: 'mapbox://styles/mapbox/light-v11',
+      center: [101.69, 4.2],
+      zoom: 6,
+      attributionControl: true,
     });
-    
-    return stats;
-  }, [menuItems, allStores]);
 
-  const boxPlotData = useMemo(() => {
-    const data: BoxPlotData[] = [];
-    
-    selectedStores.forEach((store) => {
-      const storeItems = filteredItems.filter((item) => item.store === store);
-      const prices = storeItems.map((item) => item.price);
-      
-      if (prices.length > 0) {
-        const stats = calculateBoxPlotStats(prices);
-        data.push({
-          store,
-          ...stats,
-          color: STORE_COLORS[store] || '#888',
-        });
-      }
-    });
-    
-    return data;
-  }, [filteredItems, selectedStores]);
+    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-  const histogramData = useMemo(() => {
-    const binSize = 5;
-    const bins: { [key: string]: { [store: string]: number } } = {};
-    
-    filteredItems.forEach((item) => {
-      const bin = Math.floor(item.price / binSize) * binSize;
-      const binLabel = `RM ${bin}-${bin + binSize}`;
-      
-      if (!bins[binLabel]) bins[binLabel] = {};
-      bins[binLabel][item.store] = (bins[binLabel][item.store] || 0) + 1;
-    });
-    
-    return Object.entries(bins)
-      .map(([range, stores]) => ({ range, ...stores }))
-      .sort((a, b) => {
-        const aNum = parseInt(a.range.split(' ')[1]);
-        const bNum = parseInt(b.range.split(' ')[1]);
-        return aNum - bNum;
+    map.current.on('load', () => {
+      const m = map.current;
+      if (!m) return;
+
+      m.addSource('state-borders', {
+        type: 'geojson',
+        data: '/State and District Border/malaysia.state.geojson',
       });
-  }, [filteredItems]);
-
-  const scatterData = useMemo(() => {
-    return filteredItems.map((item, idx) => ({
-      ...item,
-      x: idx,
-      y: item.price,
-      isHighlighted: highlightedItem === item.item,
-    }));
-  }, [filteredItems, highlightedItem]);
-
-  const categoryData = useMemo(() => {
-    const catStats: { [category: string]: { [store: string]: { count: number; avgPrice: number } } } = {};
-    
-    filteredItems.forEach((item) => {
-      const cat = item.category || 'Uncategorized';
-      if (!catStats[cat]) catStats[cat] = {};
-      if (!catStats[cat][item.store]) catStats[cat][item.store] = { count: 0, avgPrice: 0 };
-      
-      catStats[cat][item.store].count += 1;
-      catStats[cat][item.store].avgPrice += item.price;
-    });
-    
-    return Object.entries(catStats).map(([category, stores]) => {
-      const result: any = { category };
-      Object.entries(stores).forEach(([store, stats]) => {
-        result[`${store}_count`] = stats.count;
-        result[`${store}_avg`] = stats.avgPrice / stats.count;
+      m.addLayer({
+        id: 'state-outline',
+        type: 'line',
+        source: 'state-borders',
+        paint: { 'line-color': '#888', 'line-width': 1.5 },
       });
-      return result;
-    });
-  }, [filteredItems]);
 
-  const toggleStore = (store: string) => {
-    const newSelected = new Set(selectedStores);
-    if (newSelected.has(store)) {
-      newSelected.delete(store);
+      m.addSource('district-borders', {
+        type: 'geojson',
+        data: '/State and District Border/malaysia.district-jakim.geojson',
+      });
+      m.addLayer({
+        id: 'district-outline',
+        type: 'line',
+        source: 'district-borders',
+        paint: { 'line-color': '#ccc', 'line-width': 0.75 },
+      });
+    });
+
+    return () => {
+      markersRef.current.forEach((mrk) => mrk.remove());
+      markersRef.current = [];
+      map.current?.remove();
+      map.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !stores.length) return;
+
+    const addMarkers = () => {
+      markersRef.current.forEach((mrk) => mrk.remove());
+      markersRef.current = [];
+      const lngs = stores.map((s) => s.lng);
+      const lats = stores.map((s) => s.lat);
+      
+      // Add non-Empire markers first, then Empire so Empire is on top
+      const nonEmpireStores = stores.filter((s) => s.brand !== 'Empire Sushi');
+      const empireStores = stores.filter((s) => s.brand === 'Empire Sushi');
+      const sortedStores = [...nonEmpireStores, ...empireStores];
+
+      sortedStores.forEach((store) => {
+        const isEmpire = store.brand === 'Empire Sushi';
+        const size = isEmpire ? MARKER_SIZE_EMPIRE : MARKER_SIZE_OTHER;
+        const el = document.createElement('div');
+        el.style.width = `${size}px`;
+        el.style.height = `${size}px`;
+        el.style.borderRadius = '50%';
+        el.style.backgroundColor = isEmpire ? EMPIRE_NEON_RED : BRAND_COLORS[store.brand] || '#999';
+        el.style.border = '3px solid #fff';
+        el.style.boxShadow = isEmpire ? '0 0 16px #ff1744, 0 0 28px rgba(255,23,68,0.6)' : '0 2px 6px rgba(0,0,0,0.5)';
+        el.style.cursor = 'pointer';
+        el.style.opacity = '1';
+
+        const popup = new mapboxgl.Popup({ offset: 14, closeButton: false }).setHTML(
+          `<div style="padding:8px 12px;font-size:12px;min-width:160px;"><strong>${store.brand}</strong><br/>${store.name}<br/><span style="color:#666">${store.address || ''}</span></div>`
+        );
+
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat([store.lng, store.lat])
+          .setPopup(popup)
+          .addTo(m);
+        markersRef.current.push(marker);
+      });
+      if (lngs.length > 0 && lats.length > 0) {
+        const bounds = new mapboxgl.LngLatBounds(
+          [Math.min(...lngs), Math.min(...lats)],
+          [Math.max(...lngs), Math.max(...lats)]
+        );
+        m.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 1000 });
+      }
+    };
+
+    if (m.loaded()) {
+      addMarkers();
     } else {
-      newSelected.add(store);
+      m.once('load', addMarkers);
     }
-    setSelectedStores(newSelected);
-  };
+  }, [stores]);
 
-  if (loading) {
-    return (
-      <section className="slide relative min-h-screen w-full flex items-center justify-center bg-[var(--bg-cream)]">
-        <div className="text-center">
-          <div className="text-4xl mb-4">🍣</div>
-          <p className="text-gray-600">Loading menu data...</p>
-        </div>
-      </section>
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !choroplethGeoJSON || !m.getSource) return;
+    if (m.getLayer('choropleth-fill')) m.removeLayer('choropleth-fill');
+    if (m.getSource('choropleth')) m.removeSource('choropleth');
+    m.addSource('choropleth', { type: 'geojson', data: choroplethGeoJSON });
+    const beforeId = m.getLayer('state-outline') ? 'state-outline' : undefined;
+    m.addLayer(
+      {
+        id: 'choropleth-fill',
+        type: 'fill',
+        source: 'choropleth',
+        paint: {
+          'fill-color': ['get', '_fill'],
+          'fill-opacity': 0.5,
+        },
+      },
+      beforeId
     );
-  }
+  }, [choroplethGeoJSON]);
+
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const ob = new IntersectionObserver(
+      ([e]) => setPanelInView(e.isIntersecting),
+      { threshold: 0.2, rootMargin: '0px' }
+    );
+    ob.observe(el);
+    return () => ob.disconnect();
+  }, []);
+
+  const byBrand = stores.reduce<{ [key: string]: number }>((acc, s) => {
+    acc[s.brand] = (acc[s.brand] || 0) + 1;
+    return acc;
+  }, {});
+  const pieData = Object.entries(byBrand).map(([name, value]) => ({ name, value, fill: BRAND_COLORS[name] || '#888' }));
+
+  const filteredEnriched = selectedBrand === 'All Brands' ? enriched : enriched.filter((s) => s.brand === selectedBrand);
+
+  const byState = filteredEnriched.reduce<{ [key: string]: { [key: string]: number } }>((acc, s) => {
+    const state = s.stateName || s.state || 'Unknown';
+    if (!acc[state]) acc[state] = {};
+    acc[state][s.brand] = (acc[state][s.brand] || 0) + 1;
+    return acc;
+  }, {});
+  const brands = Array.from(new Set(filteredEnriched.map((s) => s.brand)));
+  const radarData = Object.entries(byState).slice(0, 8).map(([state, counts]) => {
+    const obj: { [key: string]: string | number } = { state: state.length > 12 ? state.slice(0, 12) + '…' : state };
+    brands.forEach((b) => (obj[b] = counts[b] || 0));
+    return obj;
+  });
+
+  const byDistrict = filteredEnriched.reduce<{ [key: string]: number }>((acc, s) => {
+    const d = s.district || 'Unknown';
+    acc[d] = (acc[d] || 0) + 1;
+    return acc;
+  }, {});
+  const barData = Object.entries(byDistrict)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([district, count]) => ({ district: district.length > 14 ? district.slice(0, 14) + '…' : district, count }));
+
+  const allBrands = Array.from(new Set(stores.map((s) => s.brand))).sort((a, b) => a === 'Empire Sushi' ? -1 : b === 'Empire Sushi' ? 1 : a.localeCompare(b));
 
   return (
-    <section className="slide relative min-h-screen w-full bg-[var(--bg-cream)] overflow-hidden">
-      <div className="flex h-screen">
-        {/* Left Sidebar - Filters & KPIs */}
-        <div className="w-80 h-screen overflow-y-auto bg-white border-r border-gray-200 p-6">
-          <div className="space-y-6">
-            {/* Header */}
-            <div>
-              <h2 className="font-serif text-2xl text-[#1a1a1a] mb-1">Menu Comparison</h2>
-              <p className="text-xs text-gray-500">Interactive analytics dashboard</p>
-            </div>
-
-            {/* Store Selection - compact */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Select Stores</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {allStores.map((store) => (
-                  <button
-                    key={store}
-                    onClick={() => toggleStore(store)}
-                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-all ${
-                      selectedStores.has(store)
-                        ? 'bg-gradient-to-r from-[var(--accent-coral)] to-[var(--accent-coral-soft)] text-white shadow-sm'
-                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span
-                      className="w-2 h-2 shrink-0 rounded-full border border-white/80"
-                      style={{ backgroundColor: STORE_COLORS[store] || '#888' }}
-                    />
-                    <span className="truncate text-left flex-1 min-w-0">{store}</span>
-                    {selectedStores.has(store) && (
-                      <svg className="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* KPIs */}
-            <div>
-              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Store Statistics</h3>
-              <div className="space-y-3">
-                {allStores.map((store) => {
-                  const stats = kpis[store];
-                  if (!stats) return null;
-                  
+    <section className="slide relative min-h-screen w-full flex bg-[var(--bg-cream)] overflow-hidden">
+      <div className="w-1/2 h-screen relative" style={{ minHeight: '100vh' }}>
+        <div
+          ref={mapContainer}
+          className="absolute inset-0 w-full h-full"
+          style={{ minHeight: '100vh' }}
+        />
+        <div className="absolute bottom-6 left-6 z-10 flex flex-col gap-3">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg p-4 border border-white/80">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Store locations</p>
+            <div className="flex flex-col gap-2">
+              {Array.from(new Set(stores.map((s) => s.brand)))
+                .sort((a, b) => (a === 'Empire Sushi' ? -1 : b === 'Empire Sushi' ? 1 : a.localeCompare(b)))
+                .map((brand) => {
+                  const isEmpire = brand === 'Empire Sushi';
+                  const count = stores.filter((s) => s.brand === brand).length;
                   return (
-                    <div
-                      key={store}
-                      className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200"
-                    >
-                      <div className="flex items-center gap-2 mb-3">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: STORE_COLORS[store] || '#888' }}
-                        />
-                        <h4 className="font-semibold text-sm text-gray-800">{store}</h4>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <span className="text-gray-500">Avg:</span>
-                          <span className="ml-1 font-semibold text-gray-800">RM {stats.avg.toFixed(2)}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Items:</span>
-                          <span className="ml-1 font-semibold text-gray-800">{stats.count}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Min:</span>
-                          <span className="ml-1 font-semibold text-gray-800">RM {stats.min.toFixed(2)}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Max:</span>
-                          <span className="ml-1 font-semibold text-gray-800">RM {stats.max.toFixed(2)}</span>
-                        </div>
-                      </div>
+                    <div key={brand} className="flex items-center gap-2">
+                      <span
+                        className="inline-block rounded-full border-2 border-white flex-shrink-0"
+                        style={{
+                          width: isEmpire ? 16 : 13,
+                          height: isEmpire ? 16 : 13,
+                          backgroundColor: isEmpire ? EMPIRE_NEON_RED : BRAND_COLORS[brand] || '#999',
+                          boxShadow: isEmpire ? '0 0 10px #ff1744' : '0 1px 3px rgba(0,0,0,0.25)',
+                        }}
+                      />
+                      <span className="text-sm font-medium text-gray-800">{brand}</span>
+                      <span className="text-xs text-gray-500 ml-auto">({count})</span>
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* Insights */}
-            <div className="bg-[#fff5f2] rounded-xl p-4 border border-[#ffb4a2]/30">
-              <p className="text-xs font-medium text-[#ff1744] uppercase tracking-wider mb-2">Insights</p>
-              <ul className="text-xs text-gray-700 space-y-1 font-light leading-relaxed">
-                <li>• {filteredItems.length} items match your filters</li>
-                <li>• {selectedStores.size} stores selected</li>
-              </ul>
             </div>
           </div>
-        </div>
-
-        {/* Right - Charts in card grid */}
-        <div className="flex-1 h-screen overflow-y-auto p-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="mb-6">
-              <h2 className="font-serif text-3xl text-[#1a1a1a] tracking-tight">Price Analysis</h2>
-              <p className="text-sm text-gray-500 mt-1">Click a card to enlarge. Select stores in the sidebar.</p>
-            </div>
-
-            {selectedStores.size === 0 ? (
-              <div className="bg-white rounded-2xl p-12 shadow-sm border border-gray-100 text-center">
-                <div className="text-6xl mb-4">🍱</div>
-                <h3 className="font-serif text-xl text-gray-800 mb-2">No stores selected</h3>
-                <p className="text-sm text-gray-500">Select at least one store from the sidebar to view analytics</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Box Plot Card */}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setExpandedChart('boxplot')}
-                  onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('boxplot')}
-                  className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
-                >
-                  <h3 className="font-serif text-lg text-[#1a1a1a] mb-3">Box Plot – Price Range Distribution</h3>
-                  <div className="h-[260px]">
-                    <ResponsiveContainer width="100%" height={260}>
-                      <ComposedChart data={boxPlotData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                        <XAxis dataKey="store" tick={{ fontSize: 11 }} stroke="#999" />
-                        <YAxis label={{ value: 'Price (RM)', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} tick={{ fontSize: 10 }} stroke="#999" />
-                        <Tooltip
-                          content={({ active, payload }) => {
-                            if (active && payload?.length) {
-                              const d = payload[0].payload as BoxPlotData;
-                              return (
-                                <div className="bg-white p-2 rounded-lg shadow-lg border border-gray-200 text-xs">
-                                  <p className="font-semibold mb-1">{d.store}</p>
-                                  <p>Max: RM {d.max.toFixed(2)}</p>
-                                  <p>Median: RM {d.median.toFixed(2)}</p>
-                                  <p>Min: RM {d.min.toFixed(2)}</p>
-                                  <p className="mt-1 pt-1 border-t">Mean: RM {d.mean.toFixed(2)}</p>
-                                </div>
-                              );
-                            }
-                            return null;
-                          }}
-                        />
-                        <Bar dataKey="min" fill="transparent" />
-                        <Bar dataKey="q1" stackId="a" fill="transparent" />
-                        <Bar dataKey={(data: BoxPlotData) => data.q3 - data.q1} stackId="a">
-                          {boxPlotData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} opacity={0.6} />
-                          ))}
-                        </Bar>
-                        <Line dataKey="median" stroke="#000" strokeWidth={2} dot={{ r: 0 }} />
-                        <Line dataKey="mean" stroke="#ff1744" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3, fill: '#ff1744' }} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">Click to enlarge</p>
-                </div>
-
-                {/* Histogram Card */}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setExpandedChart('histogram')}
-                  onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('histogram')}
-                  className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
-                >
-                  <h3 className="font-serif text-lg text-[#1a1a1a] mb-3">Price Distribution Histogram</h3>
-                  <div className="h-[260px]">
-                    <ResponsiveContainer width="100%" height={260}>
-                      <BarChart data={histogramData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                        <XAxis dataKey="range" tick={{ fontSize: 10 }} angle={-15} textAnchor="end" height={50} stroke="#999" />
-                        <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} tick={{ fontSize: 10 }} stroke="#999" />
-                        <Tooltip />
-                        <Legend />
-                        {Array.from(selectedStores).map((store) => (
-                          <Bar key={store} dataKey={store} fill={STORE_COLORS[store] || '#888'} name={store} />
-                        ))}
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">Click to enlarge</p>
-                </div>
-
-                {/* Scatter Plot Card */}
-                {scatterData.length > 0 && (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setExpandedChart('scatter')}
-                    onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('scatter')}
-                    className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
-                  >
-                    <h3 className="font-serif text-lg text-[#1a1a1a] mb-3">Scatter – Items vs Price</h3>
-                    <div className="h-[260px]">
-                      <ResponsiveContainer width="100%" height={260}>
-                        <ScatterChart margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                          <XAxis type="number" dataKey="x" tick={{ fontSize: 10 }} stroke="#999" />
-                          <YAxis type="number" dataKey="y" tick={{ fontSize: 10 }} stroke="#999" label={{ value: 'Price (RM)', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
-                          <Tooltip
-                            cursor={{ strokeDasharray: '3 3' }}
-                            content={({ active, payload }) => {
-                              if (active && payload?.length) {
-                                const d = payload[0].payload;
-                                return (
-                                  <div className="bg-white p-2 rounded-lg shadow-lg border border-gray-200 text-xs">
-                                    <p className="font-semibold">{d.store}</p>
-                                    <p className="text-gray-700">{d.item}</p>
-                                    <p className="text-[#ff1744] font-medium mt-1">RM {d.price.toFixed(2)}</p>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            }}
-                          />
-                          {Array.from(selectedStores).map((store) => {
-                            const storeData = scatterData.filter((d) => d.store === store);
-                            return (
-                              <Scatter key={store} name={store} data={storeData} fill={STORE_COLORS[store] || '#888'} onClick={(data) => setHighlightedItem(data.item)} />
-                            );
-                          })}
-                          <Legend />
-                        </ScatterChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">Click to enlarge</p>
-                  </div>
-                )}
-
-                {/* Category Card */}
-                {categoryData.length > 0 && (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setExpandedChart('category')}
-                    onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('category')}
-                    className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
-                  >
-                    <h3 className="font-serif text-lg text-[#1a1a1a] mb-3">Category-wise Average Price</h3>
-                    <div className="h-[260px]">
-                      <ResponsiveContainer width="100%" height={260}>
-                        <BarChart data={categoryData} margin={{ top: 10, right: 20, bottom: 50, left: 10 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                          <XAxis dataKey="category" tick={{ fontSize: 9 }} angle={-25} textAnchor="end" height={70} stroke="#999" />
-                          <YAxis label={{ value: 'Avg (RM)', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} tick={{ fontSize: 10 }} stroke="#999" />
-                          <Tooltip />
-                          <Legend />
-                          {Array.from(selectedStores).map((store) => (
-                            <Bar key={`${store}_avg`} dataKey={`${store}_avg`} fill={STORE_COLORS[store] || '#888'} name={store} />
-                          ))}
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">Click to enlarge</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Expanded chart overlay */}
-            {expandedChart && (
-              <div
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-                onClick={() => setExpandedChart(null)}
-                role="dialog"
-                aria-modal="true"
-                aria-label="Enlarged chart"
-              >
-                <div
-                  className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-auto"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white rounded-t-2xl">
-                    <h3 className="font-serif text-xl text-[#1a1a1a]">
-                      {expandedChart === 'boxplot' && 'Box Plot – Price Range Distribution'}
-                      {expandedChart === 'histogram' && 'Price Distribution Histogram'}
-                      {expandedChart === 'scatter' && 'Scatter – All Items vs Price'}
-                      {expandedChart === 'category' && 'Category-wise Average Price'}
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedChart(null)}
-                      className="p-2 rounded-full hover:bg-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)]"
-                      aria-label="Close"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="p-6" style={{ minHeight: '70vh' }}>
-                    {expandedChart === 'boxplot' && (
-                      <>
-                        <ResponsiveContainer width="100%" height={500}>
-                          <ComposedChart data={boxPlotData} margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                            <XAxis dataKey="store" tick={{ fontSize: 12 }} stroke="#999" />
-                            <YAxis label={{ value: 'Price (RM)', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }} tick={{ fontSize: 11 }} stroke="#999" />
-                            <Tooltip
-                              content={({ active, payload }) => {
-                                if (active && payload?.length) {
-                                  const d = payload[0].payload as BoxPlotData;
-                                  return (
-                                    <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200 text-xs">
-                                      <p className="font-semibold mb-2">{d.store}</p>
-                                      <p>Max: RM {d.max.toFixed(2)}</p>
-                                      <p>Q3: RM {d.q3.toFixed(2)}</p>
-                                      <p>Median: RM {d.median.toFixed(2)}</p>
-                                      <p>Q1: RM {d.q1.toFixed(2)}</p>
-                                      <p>Min: RM {d.min.toFixed(2)}</p>
-                                      <p className="mt-1 pt-1 border-t">Mean: RM {d.mean.toFixed(2)}</p>
-                                      {d.outliers.length > 0 && <p className="text-red-600">Outliers: {d.outliers.length}</p>}
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              }}
-                            />
-                            <Bar dataKey="min" fill="transparent" />
-                            <Bar dataKey="q1" stackId="a" fill="transparent" />
-                            <Bar dataKey={(data: BoxPlotData) => data.q3 - data.q1} stackId="a">
-                              {boxPlotData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} opacity={0.6} />
-                              ))}
-                            </Bar>
-                            <Line dataKey="median" stroke="#000" strokeWidth={2} dot={{ r: 0 }} />
-                            <Line dataKey="mean" stroke="#ff1744" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 4, fill: '#ff1744' }} />
-                          </ComposedChart>
-                        </ResponsiveContainer>
-                        <div className="mt-4 flex gap-4 justify-center text-xs text-gray-600">
-                          <div className="flex items-center gap-2"><div className="w-4 h-0.5 bg-black" /><span>Median</span></div>
-                          <div className="flex items-center gap-2"><div className="w-4 h-0.5 border-dashed" style={{ borderTop: '2px dashed #ff1744' }} /><span>Mean</span></div>
-                          <div className="flex items-center gap-2"><div className="w-4 h-3 bg-gray-400 opacity-60" /><span>IQR (Q1-Q3)</span></div>
-                        </div>
-                      </>
-                    )}
-                    {expandedChart === 'histogram' && (
-                      <ResponsiveContainer width="100%" height={500}>
-                        <BarChart data={histogramData} margin={{ top: 10, right: 30, bottom: 20, left: 20 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                          <XAxis dataKey="range" tick={{ fontSize: 11 }} angle={-15} textAnchor="end" height={60} stroke="#999" />
-                          <YAxis label={{ value: 'Item Count', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }} tick={{ fontSize: 11 }} stroke="#999" />
-                          <Tooltip />
-                          <Legend />
-                          {Array.from(selectedStores).map((store) => (
-                            <Bar key={store} dataKey={store} fill={STORE_COLORS[store] || '#888'} name={store} />
-                          ))}
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                    {expandedChart === 'scatter' && scatterData.length > 0 && (
-                      <ResponsiveContainer width="100%" height={500}>
-                        <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                          <XAxis type="number" dataKey="x" name="Item Index" tick={{ fontSize: 11 }} stroke="#999" label={{ value: 'Items (ordered)', position: 'bottom', style: { fontSize: 12 } }} />
-                          <YAxis type="number" dataKey="y" name="Price" tick={{ fontSize: 11 }} stroke="#999" label={{ value: 'Price (RM)', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }} />
-                          <Tooltip
-                            cursor={{ strokeDasharray: '3 3' }}
-                            content={({ active, payload }) => {
-                              if (active && payload?.length) {
-                                const d = payload[0].payload;
-                                return (
-                                  <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200 text-xs">
-                                    <p className="font-semibold">{d.store}</p>
-                                    <p className="text-gray-700">{d.item}</p>
-                                    <p className="text-[#ff1744] font-medium mt-1">RM {d.price.toFixed(2)}</p>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            }}
-                          />
-                          {Array.from(selectedStores).map((store) => {
-                            const storeData = scatterData.filter((d) => d.store === store);
-                            return <Scatter key={store} name={store} data={storeData} fill={STORE_COLORS[store] || '#888'} onClick={(data) => setHighlightedItem(data.item)} />;
-                          })}
-                          <Legend />
-                        </ScatterChart>
-                      </ResponsiveContainer>
-                    )}
-                    {expandedChart === 'category' && categoryData.length > 0 && (
-                      <ResponsiveContainer width="100%" height={500}>
-                        <BarChart data={categoryData} margin={{ top: 10, right: 30, bottom: 60, left: 20 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                          <XAxis dataKey="category" tick={{ fontSize: 10 }} angle={-25} textAnchor="end" height={80} stroke="#999" />
-                          <YAxis label={{ value: 'Avg Price (RM)', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }} tick={{ fontSize: 11 }} stroke="#999" />
-                          <Tooltip />
-                          <Legend />
-                          {Array.from(selectedStores).map((store) => (
-                            <Bar key={`${store}_avg`} dataKey={`${store}_avg`} fill={STORE_COLORS[store] || '#888'} name={store} />
-                          ))}
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg p-3 border border-white/80">
+            <label className="text-xs font-medium text-gray-500 block mb-1">Choropleth metric</label>
+            <select
+              value={metric}
+              onChange={(e) => setMetric(e.target.value)}
+              className="text-sm font-sans bg-transparent border-0 text-gray-800 font-medium focus:ring-0 focus:outline-none cursor-pointer w-full"
+            >
+              {CHOROPLETH_METRICS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
+
+      <div
+        ref={panelRef}
+        className={`w-1/2 h-screen overflow-y-auto p-5 lg:p-6 flex flex-col gap-5 transition-all duration-700 ${panelInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+      >
+        <div className="space-y-0.5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-serif text-2xl lg:text-3xl text-[#1a1a1a] tracking-tight">Spatial &amp; brand analytics</h2>
+            <select
+              value={selectedBrand}
+              onChange={(e) => setSelectedBrand(e.target.value)}
+              className="text-sm font-sans bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-gray-800 font-medium focus:ring-2 focus:ring-[var(--accent-coral)] focus:outline-none cursor-pointer"
+            >
+              <option value="All Brands">All Brands</option>
+              {allBrands.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-gray-500 font-light">Store counts by state and district (filtered by brand)</p>
+        </div>
+
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpandedChart('pie')}
+          onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('pie')}
+          className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+        >
+          <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Market share by brand</h3>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie
+                data={pieData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                innerRadius={40}
+                outerRadius={70}
+                paddingAngle={2}
+                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+              >
+                {pieData.map((entry, i) => (
+                  <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_NEON_RED : entry.fill} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'Stores']} />
+            </PieChart>
+          </ResponsiveContainer>
+          <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
+        </div>
+
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpandedChart('bar')}
+          onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('bar')}
+          className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+        >
+          <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Stores per district (top 12)</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
+              <XAxis type="number" stroke="#999" tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="district" width={90} tick={{ fontSize: 10 }} stroke="#999" />
+              <Tooltip />
+              <Bar dataKey="count" fill={EMPIRE_NEON_RED} radius={[0, 4, 4, 0]} name="Stores" />
+            </BarChart>
+          </ResponsiveContainer>
+          <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
+        </div>
+
+        {radarData.length > 0 && brands.length > 0 && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setExpandedChart('radar')}
+            onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('radar')}
+            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+          >
+            <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Store count by brand across states</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <RadarChart data={radarData}>
+                <PolarGrid stroke="#e5e5e5" />
+                <PolarAngleAxis dataKey="state" tick={{ fontSize: 10 }} />
+                <PolarRadiusAxis tick={{ fontSize: 9 }} />
+                {brands.map((b, i) => (
+                  <Radar
+                    key={b}
+                    name={b}
+                    dataKey={b}
+                    stroke={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
+                    fill={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
+                    fillOpacity={b === 'Empire Sushi' ? 0.45 : 0.2}
+                    strokeWidth={b === 'Empire Sushi' ? 2.5 : 1}
+                  />
+                ))}
+                <Legend />
+              </RadarChart>
+            </ResponsiveContainer>
+            <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
+          </div>
+        )}
+
+        <div className="bg-[#fff5f2] rounded-2xl p-3 border border-[#ffb4a2]/30">
+          <p className="text-xs font-medium text-[#ff1744] uppercase tracking-wider mb-1">Focus brand</p>
+          <p className="text-xs text-gray-700 font-light">
+            <strong className="text-[#ff1744]">Empire Sushi</strong> is highlighted on the map with a neon red, blinking marker (larger than other brands). Analytics above use store counts from the map. Use the choropleth dropdown to compare district-level Population, Income per capita, or Income.
+          </p>
+        </div>
+      </div>
+
+      {/* Expanded chart overlay */}
+      {expandedChart && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setExpandedChart(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Enlarged chart"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white rounded-t-2xl">
+              <h3 className="font-serif text-xl text-[#1a1a1a]">
+                {expandedChart === 'pie' && 'Market Share by Brand'}
+                {expandedChart === 'bar' && 'Stores per District (Top 12)'}
+                {expandedChart === 'radar' && 'Store Count by Brand Across States'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setExpandedChart(null)}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)]"
+                aria-label="Close"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6" style={{ minHeight: '60vh' }}>
+              {expandedChart === 'pie' && (
+                <ResponsiveContainer width="100%" height={500}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={140}
+                      paddingAngle={2}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                    >
+                      {pieData.map((entry, i) => (
+                        <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_NEON_RED : entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'Stores']} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+              {expandedChart === 'bar' && (
+                <ResponsiveContainer width="100%" height={500}>
+                  <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                    <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} />
+                    <YAxis type="category" dataKey="district" width={110} tick={{ fontSize: 11 }} stroke="#999" />
+                    <Tooltip />
+                    <Bar dataKey="count" fill={EMPIRE_NEON_RED} radius={[0, 6, 6, 0]} name="Stores" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              {expandedChart === 'radar' && radarData.length > 0 && brands.length > 0 && (
+                <ResponsiveContainer width="100%" height={500}>
+                  <RadarChart data={radarData}>
+                    <PolarGrid stroke="#e5e5e5" />
+                    <PolarAngleAxis dataKey="state" tick={{ fontSize: 11 }} />
+                    <PolarRadiusAxis tick={{ fontSize: 10 }} />
+                    {brands.map((b) => (
+                      <Radar
+                        key={b}
+                        name={b}
+                        dataKey={b}
+                        stroke={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
+                        fill={b === 'Empire Sushi' ? EMPIRE_NEON_RED : BRAND_COLORS[b] || '#888'}
+                        fillOpacity={b === 'Empire Sushi' ? 0.45 : 0.2}
+                        strokeWidth={b === 'Empire Sushi' ? 2.5 : 1}
+                      />
+                    ))}
+                    <Legend />
+                  </RadarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
