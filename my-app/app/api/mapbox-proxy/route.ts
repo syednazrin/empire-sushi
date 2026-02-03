@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Server-side token only — frontend requests tiles via this proxy so the token stays on the server
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || process.env.MAPBOX_TOKEN || 'pk.eyJ1IjoibXNoYW1pIiwiYSI6ImNtMGljY28zMzBqZGsycXF4MGppdmE0bWUifQ.nWArfpCw78mToZi2cN-e8w';
+// Hardcoded Mapbox token (tiles/styles proxied server-side)
+const MAPBOX_TOKEN = 'pk.eyJ1IjoibXNoYW1pIiwiYSI6ImNtMGljY28zMzBqZGsycXF4MGppdmE0bWUifQ.nWArfpCw78mToZi2cN-e8w';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     if (!targetUrl) {
       return NextResponse.json(
         { error: 'Missing url parameter' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders() }
       );
     }
 
@@ -27,28 +27,37 @@ export async function GET(request: NextRequest) {
       console.error(`Mapbox proxy error: ${response.status} for ${urlWithToken}`);
       return NextResponse.json(
         { error: `Failed to fetch from Mapbox: ${response.statusText}` },
-        { status: response.status }
+        { status: response.status, headers: corsHeaders() }
       );
     }
 
-    // Determine content type from response
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
-    
-    // Get the response data
     const data = await response.arrayBuffer();
 
     return new NextResponse(data, {
       headers: {
+        ...corsHeaders(),
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*',
       },
     });
   } catch (error) {
     console.error('Error in Mapbox proxy:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders() }
     );
   }
+}
+
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }

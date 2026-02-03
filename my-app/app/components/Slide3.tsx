@@ -24,8 +24,8 @@ import { PieChart as PieIcon, BarChart3, Radar as RadarIcon, MapPin, AlertCircle
 import { competitiveAreas, topContestedStores, isTier1District, circlePolygon } from '../utils/geo';
 import type { StoreWithCoord } from '../utils/geo';
 
-// Token only used as fallback; tiles/styles are fetched via /api/mapbox-proxy (server adds real token)
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'proxy';
+// Hardcoded Mapbox token (tiles/styles also proxied via /api/mapbox-proxy)
+mapboxgl.accessToken = 'pk.eyJ1IjoibXNoYW1pIiwiYSI6ImNtMGljY28zMzBqZGsycXF4MGppdmE0bWUifQ.nWArfpCw78mToZi2cN-e8w';
 
 const CHOROPLETH_METRICS = [
   { value: 'Population (k)', label: 'Population (k)' },
@@ -93,6 +93,11 @@ export default function Slide3() {
   useEffect(() => {
     if (!mapContainer.current) return;
     const container = mapContainer.current;
+
+    // Route map-sessions through our proxy to avoid CORS (session request doesn't use transformRequest)
+    if (typeof window !== 'undefined') {
+      mapboxgl.baseApiUrl = `${window.location.origin}/api/mapbox-proxy`;
+    }
 
     map.current = new mapboxgl.Map({
       container,
@@ -559,8 +564,8 @@ export default function Slide3() {
                 <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-coral)] shrink-0" />
                 <span className="truncate">Store count by state ({selectedBrand})</span>
               </h3>
-              <div className="aspect-square w-full min-h-[120px]">
-                <ResponsiveContainer width="100%" height="100%" minHeight={120}>
+              <div className="aspect-square w-full" style={{ minHeight: 140 }}>
+                <ResponsiveContainer width="100%" height={140} minHeight={140}>
                   <BarChart data={stateBarData} layout="vertical" margin={{ left: 4, right: 4, top: 0, bottom: 0 }}>
                     <XAxis type="number" stroke="#999" tick={{ fontSize: 7 }} />
                     <YAxis type="category" dataKey="state" width={44} tick={{ fontSize: 6 }} stroke="#999" />
