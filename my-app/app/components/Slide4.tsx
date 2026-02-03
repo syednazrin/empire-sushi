@@ -16,6 +16,7 @@ import {
   BarChart,
   Line,
 } from 'recharts';
+import { Table, X } from 'lucide-react';
 
 interface MenuItem {
   store: string;
@@ -77,6 +78,8 @@ export default function Slide4() {
   const [highlightedItem, setHighlightedItem] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedChart, setExpandedChart] = useState<ChartId | null>(null);
+  const [menuTableOpen, setMenuTableOpen] = useState(false);
+  const [menuTableBrand, setMenuTableBrand] = useState<string>('');
 
   useEffect(() => {
     fetch('/api/menu-items')
@@ -97,6 +100,13 @@ export default function Slide4() {
   const allStores = useMemo(() => {
     return Array.from(new Set(menuItems.map((item) => item.store))).sort();
   }, [menuItems]);
+
+  const menuTableItems = useMemo(() => {
+    if (!menuTableBrand) return [];
+    return menuItems
+      .filter((item) => item.store === menuTableBrand)
+      .sort((a, b) => (a.category || '').localeCompare(b.category || '') || a.item.localeCompare(b.item));
+  }, [menuItems, menuTableBrand]);
 
   const filteredItems = useMemo(() => {
     return menuItems.filter((item) =>
@@ -227,7 +237,82 @@ export default function Slide4() {
             <div>
               <h2 className="font-serif text-2xl text-[#1a1a1a] mb-1">Menu Comparison</h2>
               <p className="text-xs text-gray-500">Interactive analytics dashboard</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuTableOpen(true);
+                  if (!menuTableBrand && allStores.length > 0) setMenuTableBrand(allStores[0]);
+                }}
+                className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[var(--accent-coral)] hover:underline focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-1 rounded"
+              >
+                <Table className="w-3.5 h-3.5" />
+                View menu items table
+              </button>
             </div>
+
+            {/* Menu items table popup */}
+            {menuTableOpen && (
+              <>
+                <div
+                  className="fixed inset-0 bg-black/40 z-40"
+                  aria-hidden
+                  onClick={() => setMenuTableOpen(false)}
+                />
+                <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(90vw,640px)] max-h-[85vh] flex flex-col bg-white rounded-2xl shadow-xl border border-gray-200">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h3 className="font-serif text-lg text-[#1a1a1a]">Menu items by brand</h3>
+                    <button
+                      type="button"
+                      onClick={() => setMenuTableOpen(false)}
+                      className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)]"
+                      aria-label="Close"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="p-4 border-b border-gray-100">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Brand</label>
+                    <select
+                      value={menuTableBrand}
+                      onChange={(e) => setMenuTableBrand(e.target.value)}
+                      className="w-full text-sm font-sans bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-gray-800 focus:ring-2 focus:ring-[var(--accent-coral)] focus:outline-none"
+                    >
+                      {allStores.map((store) => (
+                        <option key={store} value={store}>{store}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1 overflow-auto p-4">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-2 px-3 font-semibold text-gray-700">Item</th>
+                          <th className="text-left py-2 px-3 font-semibold text-gray-700">Category</th>
+                          <th className="text-right py-2 px-3 font-semibold text-gray-700">Price (RM)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {menuTableItems.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-8 text-center text-gray-500">
+                              No menu items for this brand.
+                            </td>
+                          </tr>
+                        ) : (
+                          menuTableItems.map((row, i) => (
+                            <tr key={`${row.store}-${row.item}-${i}`} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="py-2 px-3 text-gray-800">{row.item}</td>
+                              <td className="py-2 px-3 text-gray-600">{row.category ?? '—'}</td>
+                              <td className="py-2 px-3 text-right font-medium text-gray-800">{row.price.toFixed(2)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Store Selection - compact */}
             <div>

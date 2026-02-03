@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
@@ -20,6 +20,9 @@ import {
   Cell,
   Legend,
 } from 'recharts';
+import { PieChart as PieIcon, BarChart3, Radar as RadarIcon, MapPin, AlertCircle, X, Search } from 'lucide-react';
+import { competitiveAreas, topContestedStores, isTier1District, circlePolygon } from '../utils/geo';
+import type { StoreWithCoord } from '../utils/geo';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'pk.eyJ1IjoibXNoYW1pIiwiYSI6ImNtMGljY28zMzBqZGsycXF4MGppdmE0bWUifQ.nWArfpCw78mToZi2cN-e8w';
 
@@ -59,7 +62,12 @@ export default function Slide3() {
   const [metric, setMetric] = useState('Population (k)');
   const [panelInView, setPanelInView] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState('Empire Sushi');
-  type ChartId = 'pie' | 'bar' | 'radar';
+  const [showConflictZones, setShowConflictZones] = useState(false);
+  const [highlightClusters, setHighlightClusters] = useState(false);
+  const [districtCount, setDistrictCount] = useState(12);
+  const [districtSearch, setDistrictSearch] = useState('');
+  const [contestedSearch, setContestedSearch] = useState('');
+  type ChartId = 'pie' | 'bar' | 'state-bar' | 'performance-radar';
   const [expandedChart, setExpandedChart] = useState<ChartId | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -224,7 +232,8 @@ export default function Slide3() {
   }, {});
   const pieData = Object.entries(byBrand).map(([name, value]) => ({ name, value, fill: BRAND_COLORS[name] || '#888' }));
 
-  const filteredEnriched = selectedBrand === 'All Brands' ? enriched : enriched.filter((s) => s.brand === selectedBrand);
+  const isGeneral = selectedBrand === 'General';
+  const filteredEnriched = isGeneral ? enriched : enriched.filter((s) => s.brand === selectedBrand);
 
   const byState = filteredEnriched.reduce<{ [key: string]: { [key: string]: number } }>((acc, s) => {
     const state = s.stateName || s.state || 'Unknown';
@@ -244,12 +253,139 @@ export default function Slide3() {
     acc[d] = (acc[d] || 0) + 1;
     return acc;
   }, {});
-  const barData = Object.entries(byDistrict)
+  const districtDataFull = Object.entries(byDistrict)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 12)
-    .map(([district, count]) => ({ district: district.length > 14 ? district.slice(0, 14) + '…' : district, count }));
+    .map(([district, count]) => ({ district, count }));
+  const barData = districtDataFull
+    .slice(0, districtCount)
+    .map(({ district, count }) => ({ district: district.length > 14 ? district.slice(0, 14) + '…' : district, count }));
 
   const allBrands = Array.from(new Set(stores.map((s) => s.brand))).sort((a, b) => a === 'Empire Sushi' ? -1 : b === 'Empire Sushi' ? 1 : a.localeCompare(b));
+
+  const storesWithCoord: StoreWithCoord[] = useMemo(() => {
+    const byKey = new Map<string, StoreWithCoord>();
+    stores.forEach((s) => byKey.set(`${s.lng}-${s.lat}-${s.brand}`, { ...s }));
+    enriched.forEach((e: { brand: string; state?: string; stateName?: string; district?: string; lat?: number; lng?: number; name?: string; address?: string }) => {
+      const key = `${e.lng}-${e.lat}-${e.brand}`;
+      const existing = byKey.get(key);
+      if (existing) byKey.set(key, { ...existing, state: e.state, stateName: e.stateName, district: e.district });
+      else if (e.lat != null && e.lng != null) byKey.set(key, { name: e.name ?? '', address: e.address ?? '', lat: e.lat, lng: e.lng, brand: e.brand, state: e.state, stateName: e.stateName, district: e.district });
+    });
+    return Array.from(byKey.values());
+  }, [stores, enriched]);
+
+  const { count: competitiveAreasCount, conflictCoords } = useMemo(
+    () => competitiveAreas(storesWithCoord),
+    [storesWithCoord]
+  );
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !m.getSource) return;
+    if (m.getLayer('conflict-zones-fill')) m.removeLayer('conflict-zones-fill');
+    if (m.getSource('conflict-zones')) m.removeSource('conflict-zones');
+    if (showConflictZones && conflictCoords.length > 0) {
+      const features = conflictCoords.map((c) => ({
+        type: 'Feature' as const,
+        properties: {},
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [circlePolygon(c.lng, c.lat, 1)],
+        },
+      }));
+      m.addSource('conflict-zones', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+      m.addLayer({
+        id: 'conflict-zones-fill',
+        type: 'fill',
+        source: 'conflict-zones',
+        paint: { 'fill-color': '#ff6b4a', 'fill-opacity': 0.2 },
+      });
+    }
+  }, [showConflictZones, conflictCoords]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !m.getSource) return;
+    if (m.getLayer('cluster-highlight-fill')) m.removeLayer('cluster-highlight-fill');
+    if (m.getSource('cluster-highlight')) m.removeSource('cluster-highlight');
+    if (highlightClusters && conflictCoords.length > 0) {
+      const features = conflictCoords.map((c) => ({
+        type: 'Feature' as const,
+        properties: {},
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [circlePolygon(c.lng, c.lat, 1)],
+        },
+      }));
+      m.addSource('cluster-highlight', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+      m.addLayer({
+        id: 'cluster-highlight-fill',
+        type: 'fill',
+        source: 'cluster-highlight',
+        paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.35 },
+      });
+    }
+  }, [highlightClusters, conflictCoords]);
+
+  const contestedStores = useMemo(() => topContestedStores(storesWithCoord, 5), [storesWithCoord]);
+
+  const stateBarData = useMemo(() => {
+    const byStateBrand = enriched.reduce<{ [state: string]: { [brand: string]: number } }>((acc, s) => {
+      const state = s.stateName || s.state || 'Unknown';
+      if (!acc[state]) acc[state] = {};
+      acc[state][s.brand] = (acc[state][s.brand] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(byStateBrand)
+      .map(([state, counts]) => ({ state: state.length > 12 ? state.slice(0, 12) + '…' : state, count: counts[selectedBrand] || 0 }))
+      .filter((d) => d.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [enriched, selectedBrand]);
+
+  const allDistricts = useMemo(() => Array.from(new Set(enriched.map((e) => e.district).filter(Boolean))), [enriched]);
+  const brandDistricts = useMemo(() => new Set(enriched.filter((e) => e.brand === selectedBrand).map((e) => e.district).filter(Boolean)), [enriched, selectedBrand]);
+  const maxStoresBrand = Math.max(...Object.values(byBrand), 1);
+  const brandStoresCount = byBrand[selectedBrand] || 0;
+  const brandEnriched = enriched.filter((e) => e.brand === selectedBrand);
+  const urbanCount = brandEnriched.filter((e) => isTier1District(e.district)).length;
+  const brandInCompetitiveAreas = useMemo(
+    () => conflictCoords.filter((c) => {
+      const brandStore = storesWithCoord.find((s) => s.brand === selectedBrand && s.lng === c.lng && s.lat === c.lat);
+      return !!brandStore;
+    }).length,
+    [conflictCoords, storesWithCoord, selectedBrand]
+  );
+  const brandPerformanceData = useMemo(() => {
+    const penetration = allDistricts.length > 0 ? (brandDistricts.size / allDistricts.length) * 100 : 0;
+    const accessibility = maxStoresBrand > 0 ? (brandStoresCount / maxStoresBrand) * 100 : 0;
+    const urbanDominance = brandStoresCount > 0 ? (urbanCount / brandStoresCount) * 100 : 0;
+    const clutter = brandStoresCount > 0 ? (brandInCompetitiveAreas / brandStoresCount) * 100 : 0;
+    return [
+      { metric: 'Accessibility', value: Math.round(accessibility), fullMark: 100 },
+      { metric: 'Market Penetration', value: Math.round(penetration), fullMark: 100 },
+      { metric: 'Urban Dominance', value: Math.round(urbanDominance), fullMark: 100 },
+      { metric: 'Clutter Score', value: Math.round(Math.min(clutter, 100)), fullMark: 100 },
+    ];
+  }, [selectedBrand, brandStoresCount, maxStoresBrand, brandDistricts.size, allDistricts.length, urbanCount, brandInCompetitiveAreas]);
+
+  const marketGapDistricts = useMemo(() => {
+    const byDistrictAll = enriched.reduce<{ [d: string]: { [b: string]: number } }>((acc, s) => {
+      const d = s.district || '';
+      if (!d) return acc;
+      if (!acc[d]) acc[d] = {};
+      acc[d][s.brand] = (acc[d][s.brand] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(byDistrictAll)
+      .filter(([, counts]) => !counts[selectedBrand] && Object.keys(counts).length > 0)
+      .map(([district, counts]) => ({ district, totalCompetitors: Object.values(counts).reduce((a, b) => a + b, 0) }))
+      .sort((a, b) => b.totalCompetitors - a.totalCompetitors)
+      .slice(0, 3);
+  }, [enriched, selectedBrand]);
+
+  const nationalAvgStoresPerDistrict = allDistricts.length > 0 ? stores.length / allDistricts.length : 0;
+  const brandAvgStoresPerDistrict = brandDistricts.size > 0 ? brandStoresCount / brandDistricts.size : 0;
+  const saturationScore = nationalAvgStoresPerDistrict > 0 ? Math.min(100, Math.round((brandAvgStoresPerDistrict / nationalAvgStoresPerDistrict) * 50)) : 0;
 
   return (
     <section className="slide relative min-h-screen w-full flex bg-[var(--bg-cream)] overflow-hidden">
@@ -300,118 +436,232 @@ export default function Slide3() {
               ))}
             </select>
           </div>
+          <label className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg p-3 border border-white/80 flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={highlightClusters}
+              onChange={(e) => setHighlightClusters(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <span className="text-xs font-medium text-gray-700">Highlight competitive clusters</span>
+          </label>
         </div>
       </div>
 
       <div
         ref={panelRef}
-        className={`slide3-panel w-1/2 h-screen overflow-y-auto p-5 lg:p-6 flex flex-col gap-5 transition-all duration-700 ${panelInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+        className={`slide3-panel w-1/2 h-screen overflow-y-auto p-4 lg:p-5 flex flex-col gap-4 transition-all duration-700 bg-[#f9fafb] ${panelInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
       >
-        <div className="space-y-0.5">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-serif text-2xl lg:text-3xl text-[#1a1a1a] tracking-tight">Spatial &amp; brand analytics</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-serif text-xl lg:text-2xl text-[#1a1a1a] tracking-tight">Spatial &amp; brand analytics</h2>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-600">Brand</label>
             <select
               value={selectedBrand}
               onChange={(e) => setSelectedBrand(e.target.value)}
-              className="text-sm font-sans bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-gray-800 font-medium focus:ring-2 focus:ring-[var(--accent-coral)] focus:outline-none cursor-pointer"
+              className="text-sm font-sans bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-gray-800 font-medium focus:ring-2 focus:ring-[var(--accent-coral)] focus:outline-none cursor-pointer"
             >
-              <option value="All Brands">All Brands</option>
               {allBrands.map((b) => (
                 <option key={b} value={b}>{b}</option>
               ))}
             </select>
           </div>
-          <p className="text-xs text-gray-500 font-light">Store counts by state and district (filtered by brand)</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setExpandedChart('pie')}
-            onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('pie')}
-            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
-          >
-            <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Market share by brand</h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={35}
-                  outerRadius={60}
-                  paddingAngle={2}
-                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                >
-                  {pieData.map((entry, i) => (
-                    <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_RED : entry.fill} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'Stores']} />
-              </PieChart>
-            </ResponsiveContainer>
-            <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
-          </div>
-
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setExpandedChart('bar')}
-            onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('bar')}
-            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
-          >
-            <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Stores per district (top 12)</h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={barData} layout="vertical" margin={{ left: 16, right: 16 }}>
-                <XAxis type="number" stroke="#999" tick={{ fontSize: 8 }} />
-                <YAxis type="category" dataKey="district" width={72} tick={{ fontSize: 8 }} stroke="#999" />
-                <Tooltip />
-                <Bar dataKey="count" fill={EMPIRE_RED} radius={[0, 4, 4, 0]} name="Stores" />
-              </BarChart>
-            </ResponsiveContainer>
-            <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
-          </div>
-
-          {radarData.length > 0 && brands.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
+          {/* Left column: General + chart widgets (filled – same widgets as before, shared across columns for balance) */}
+          <div className="flex flex-col gap-4 min-h-0">
             <div
               role="button"
               tabIndex={0}
-              onClick={() => setExpandedChart('radar')}
-              onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('radar')}
-              className="col-span-2 bg-white rounded-2xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+              onClick={() => setExpandedChart('pie')}
+              onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('pie')}
+              className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
             >
-              <h3 className="font-serif text-base text-[#1a1a1a] mb-3">Store count by brand across states</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <RadarChart data={radarData}>
+              <h3 className="font-serif text-sm text-[#1a1a1a] mb-2 flex items-center gap-2">
+                <PieIcon className="w-4 h-4 text-[var(--accent-coral)]" />
+                Market share by brand
+              </h3>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={40}
+                    outerRadius={65}
+                    paddingAngle={2}
+                    label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                  >
+                    {pieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.name === 'Empire Sushi' ? EMPIRE_RED : entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'Stores']} />
+                </PieChart>
+              </ResponsiveContainer>
+              <p className="text-[10px] text-gray-500 mt-1 text-center">Click to enlarge</p>
+            </div>
+
+            {/* Store count by state */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setExpandedChart('state-bar')}
+              onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('state-bar')}
+              className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+            >
+              <h3 className="font-serif text-xs text-[#1a1a1a] mb-1.5 flex items-center gap-1.5">
+                <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-coral)] shrink-0" />
+                <span className="truncate">Store count by state ({selectedBrand})</span>
+              </h3>
+              <div className="aspect-square w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stateBarData} layout="vertical" margin={{ left: 4, right: 4, top: 0, bottom: 0 }}>
+                    <XAxis type="number" stroke="#999" tick={{ fontSize: 7 }} />
+                    <YAxis type="category" dataKey="state" width={44} tick={{ fontSize: 6 }} stroke="#999" />
+                    <Tooltip />
+                    <Bar dataKey="count" fill={BRAND_COLORS[selectedBrand] || EMPIRE_RED} radius={[0, 3, 3, 0]} name="Stores" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-[9px] text-gray-500 mt-1 text-center">Click to enlarge</p>
+            </div>
+
+            {/* Stores per district */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              <h3 className="font-serif text-sm text-[#1a1a1a] mb-2">Stores per district</h3>
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="range"
+                  min={5}
+                  max={Math.max(5, Math.min(50, districtDataFull.length))}
+                  value={districtCount}
+                  onChange={(e) => setDistrictCount(Number(e.target.value))}
+                  className="flex-1 h-2 rounded-lg appearance-none bg-gray-200 accent-[var(--accent-coral)]"
+                />
+                <span className="text-xs font-medium text-gray-600 tabular-nums">Top {districtCount}</span>
+              </div>
+              <div className="max-h-32 overflow-y-auto">
+                <ResponsiveContainer width="100%" height={Math.max(60, Math.min(160, districtDataFull.slice(0, districtCount).length * 20))}>
+                  <BarChart data={barData} layout="vertical" margin={{ left: 8, right: 8 }}>
+                    <XAxis type="number" stroke="#999" tick={{ fontSize: 8 }} />
+                    <YAxis type="category" dataKey="district" width={70} tick={{ fontSize: 7 }} stroke="#999" />
+                    <Tooltip />
+                    <Bar dataKey="count" fill={BRAND_COLORS[selectedBrand] || EMPIRE_RED} radius={[0, 3, 3, 0]} name="Stores" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Brand performance radar */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setExpandedChart('performance-radar')}
+              onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('performance-radar')}
+              className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2"
+            >
+              <h3 className="font-serif text-sm text-[#1a1a1a] mb-2 flex items-center gap-2">
+                <RadarIcon className="w-4 h-4 text-[var(--accent-coral)]" />
+                Brand performance metrics
+              </h3>
+              <ResponsiveContainer width="100%" height={160}>
+                <RadarChart data={brandPerformanceData}>
                   <PolarGrid stroke="#e5e5e5" />
-                  <PolarAngleAxis dataKey="state" tick={{ fontSize: 8 }} />
-                  <PolarRadiusAxis tick={{ fontSize: 7 }} />
-                  {brands.map((b, i) => (
-                    <Radar
-                      key={b}
-                      name={b}
-                      dataKey={b}
-                      stroke={b === 'Empire Sushi' ? EMPIRE_RED : BRAND_COLORS[b] || '#888'}
-                      fill={b === 'Empire Sushi' ? EMPIRE_RED : BRAND_COLORS[b] || '#888'}
-                      fillOpacity={b === 'Empire Sushi' ? 0.45 : 0.2}
-                      strokeWidth={b === 'Empire Sushi' ? 2.5 : 1}
-                    />
-                  ))}
-                  <Legend wrapperStyle={{ fontSize: 8 }} iconSize={6} />
+                  <PolarAngleAxis dataKey="metric" tick={{ fontSize: 8 }} />
+                  <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 7 }} />
+                  <Radar name={selectedBrand} dataKey="value" stroke={BRAND_COLORS[selectedBrand] || EMPIRE_RED} fill={BRAND_COLORS[selectedBrand] || EMPIRE_RED} fillOpacity={0.4} strokeWidth={2} />
                 </RadarChart>
               </ResponsiveContainer>
-              <p className="text-xs text-gray-500 mt-2 text-center">Click to enlarge</p>
+              <p className="text-[10px] text-gray-500 mt-1 text-center">Click to enlarge</p>
             </div>
-          )}
+          </div>
 
-          <div className="col-span-2 bg-[#fff5f2] rounded-2xl p-3 border border-[#ffb4a2]/30">
-            <p className="text-xs font-medium text-[#c62828] uppercase tracking-wider mb-1">Focus brand</p>
-            <p className="text-xs text-gray-700 font-light">
-              <strong className="text-[#c62828]">Empire Sushi</strong> is highlighted on the map with a red marker (larger than other brands). Analytics above use store counts from the map. Use the choropleth dropdown to compare district-level Population, Income per capita, or Income.
-            </p>
+          {/* Right column: Competitive insights, market gap, saturation, proximity, focus */}
+          <div className="flex flex-col gap-4 min-h-0">
+            {/* Competitive Areas + Show Conflict Zones */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              <h3 className="font-serif text-sm text-[#1a1a1a] mb-2 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-[var(--accent-coral)]" />
+                Count of competitive areas
+              </h3>
+              <p className="text-2xl font-bold text-[#1a1a1a] tabular-nums">{competitiveAreasCount}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">Store locations with ≥1 competitor within 1 km</p>
+              <button
+                type="button"
+                onClick={() => setShowConflictZones((v) => !v)}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium bg-[#fff5f2] text-[var(--accent-coral)] border border-[#ffb4a2]/50 hover:bg-[#ffebe6] transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                {showConflictZones ? 'Hide conflict zones' : 'Show conflict zones'}
+              </button>
+            </div>
+
+            {/* Market gap */}
+            {marketGapDistricts.length > 0 && (
+              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <h3 className="font-serif text-sm text-[#1a1a1a] mb-2">Market gap (expansion potential)</h3>
+                <p className="text-[10px] text-gray-500 mb-2">Top districts with zero {selectedBrand} presence but high competitor presence</p>
+                <ul className="space-y-1">
+                  {marketGapDistricts.map(({ district, totalCompetitors }) => (
+                    <li key={district} className="flex justify-between text-xs">
+                      <span className="text-gray-800 truncate">{district}</span>
+                      <span className="text-gray-500 tabular-nums">{totalCompetitors} competitors</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Saturation score */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              <h3 className="font-serif text-sm text-[#1a1a1a] mb-2">Saturation score</h3>
+              <p className="text-[10px] text-gray-500 mb-1">Crowdedness of {selectedBrand} locations vs national average</p>
+              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--accent-coral)] transition-all duration-300"
+                  style={{ width: `${saturationScore}%` }}
+                />
+              </div>
+              <p className="text-xs font-medium text-gray-600 mt-1">{saturationScore}%</p>
+            </div>
+
+            {/* Proximity table – top 5 contested */}
+            {contestedStores.length > 0 && (
+              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <h3 className="font-serif text-sm text-[#1a1a1a] mb-2 flex items-center gap-2">
+                  <Search className="w-4 h-4 text-[var(--accent-coral)]" />
+                  Top 5 most contested stores
+                </h3>
+                <input
+                  type="text"
+                  placeholder="Search address..."
+                  value={contestedSearch}
+                  onChange={(e) => setContestedSearch(e.target.value)}
+                  className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 mb-2 focus:ring-2 focus:ring-[var(--accent-coral)] focus:outline-none"
+                />
+                <div className="max-h-28 overflow-y-auto space-y-1">
+                  {contestedStores
+                    .filter(({ store }) => !contestedSearch || store.address.toLowerCase().includes(contestedSearch.toLowerCase()))
+                    .map(({ store, competitorCount }) => (
+                      <div key={`${store.lng}-${store.lat}`} className="text-[10px] p-2 rounded-lg bg-gray-50 border border-gray-100">
+                        <p className="font-medium text-gray-800 truncate">{store.address || store.name}</p>
+                        <p className="text-gray-500">({store.lat.toFixed(4)}, {store.lng.toFixed(4)}) · {competitorCount} competitors within 1 km</p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-[#fff5f2] rounded-xl p-3 border border-[#ffb4a2]/30">
+              <p className="text-[10px] font-medium text-[#c62828] uppercase tracking-wider mb-1">Focus brand</p>
+              <p className="text-[10px] text-gray-700 font-light">
+                <strong className="text-[#c62828]">{selectedBrand}</strong> is highlighted on the map. Use the choropleth dropdown to compare district-level Population, Income per capita, or Income.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -432,8 +682,9 @@ export default function Slide3() {
             <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white rounded-t-2xl">
               <h3 className="font-serif text-xl text-[#1a1a1a]">
                 {expandedChart === 'pie' && 'Market Share by Brand'}
-                {expandedChart === 'bar' && 'Stores per District (Top 12)'}
-                {expandedChart === 'radar' && 'Store Count by Brand Across States'}
+                {expandedChart === 'bar' && `Stores per District (Top ${districtCount})`}
+                {expandedChart === 'state-bar' && `Store Count by State (${selectedBrand})`}
+                {expandedChart === 'performance-radar' && `Brand Performance (${selectedBrand})`}
               </h3>
               <button
                 type="button"
@@ -441,9 +692,7 @@ export default function Slide3() {
                 className="p-2 rounded-full hover:bg-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)]"
                 aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-6 h-6" />
               </button>
             </div>
             <div className="p-6" style={{ minHeight: '60vh' }}>
@@ -475,28 +724,27 @@ export default function Slide3() {
                     <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} />
                     <YAxis type="category" dataKey="district" width={110} tick={{ fontSize: 11 }} stroke="#999" />
                     <Tooltip />
-                    <Bar dataKey="count" fill={EMPIRE_RED} radius={[0, 6, 6, 0]} name="Stores" />
+                    <Bar dataKey="count" fill={BRAND_COLORS[selectedBrand] || EMPIRE_RED} radius={[0, 6, 6, 0]} name="Stores" />
                   </BarChart>
                 </ResponsiveContainer>
               )}
-              {expandedChart === 'radar' && radarData.length > 0 && brands.length > 0 && (
+              {expandedChart === 'state-bar' && (
                 <ResponsiveContainer width="100%" height={500}>
-                  <RadarChart data={radarData}>
+                  <BarChart data={stateBarData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                    <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} />
+                    <YAxis type="category" dataKey="state" width={100} tick={{ fontSize: 11 }} stroke="#999" />
+                    <Tooltip />
+                    <Bar dataKey="count" fill={BRAND_COLORS[selectedBrand] || EMPIRE_RED} radius={[0, 6, 6, 0]} name="Stores" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              {expandedChart === 'performance-radar' && (
+                <ResponsiveContainer width="100%" height={500}>
+                  <RadarChart data={brandPerformanceData}>
                     <PolarGrid stroke="#e5e5e5" />
-                    <PolarAngleAxis dataKey="state" tick={{ fontSize: 11 }} />
-                    <PolarRadiusAxis tick={{ fontSize: 10 }} />
-                    {brands.map((b) => (
-                      <Radar
-                        key={b}
-                        name={b}
-                        dataKey={b}
-                        stroke={b === 'Empire Sushi' ? EMPIRE_RED : BRAND_COLORS[b] || '#888'}
-                        fill={b === 'Empire Sushi' ? EMPIRE_RED : BRAND_COLORS[b] || '#888'}
-                        fillOpacity={b === 'Empire Sushi' ? 0.45 : 0.2}
-                        strokeWidth={b === 'Empire Sushi' ? 2.5 : 1}
-                      />
-                    ))}
-                    <Legend />
+                    <PolarAngleAxis dataKey="metric" tick={{ fontSize: 12 }} />
+                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
+                    <Radar name={selectedBrand} dataKey="value" stroke={BRAND_COLORS[selectedBrand] || EMPIRE_RED} fill={BRAND_COLORS[selectedBrand] || EMPIRE_RED} fillOpacity={0.4} strokeWidth={2} />
                   </RadarChart>
                 </ResponsiveContainer>
               )}
