@@ -24,7 +24,8 @@ import { PieChart as PieIcon, BarChart3, Radar as RadarIcon, MapPin, AlertCircle
 import { competitiveAreas, topContestedStores, isTier1District, circlePolygon } from '../utils/geo';
 import type { StoreWithCoord } from '../utils/geo';
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+// Token only used as fallback; tiles/styles are fetched via /api/mapbox-proxy (server adds real token)
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'proxy';
 
 const CHOROPLETH_METRICS = [
   { value: 'Population (k)', label: 'Population (k)' },
@@ -93,17 +94,22 @@ export default function Slide3() {
     if (!mapContainer.current) return;
     const container = mapContainer.current;
 
-    // Route map-sessions through our proxy to avoid CORS (session request doesn't use transformRequest)
-    if (typeof window !== 'undefined') {
-      mapboxgl.baseApiUrl = `${window.location.origin}/api/mapbox-proxy`;
-    }
-
     map.current = new mapboxgl.Map({
       container,
       style: 'mapbox://styles/mapbox/light-v11',
       bounds: new mapboxgl.LngLatBounds(MALAYSIA_BOUNDS[0], MALAYSIA_BOUNDS[1]),
       fitBoundsOptions: { padding: 40, maxZoom: 8 },
       attributionControl: true,
+      transformRequest: (url: string) => {
+        // Proxy all Mapbox requests through our server; must return absolute URL so Request() parses correctly
+        if (url && url.includes('mapbox.com')) {
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          return {
+            url: `${origin}/api/mapbox-proxy?url=${encodeURIComponent(url)}`,
+          };
+        }
+        return { url: url || '' };
+      },
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -553,8 +559,8 @@ export default function Slide3() {
                 <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-coral)] shrink-0" />
                 <span className="truncate">Store count by state ({selectedBrand})</span>
               </h3>
-              <div className="aspect-square w-full" style={{ minHeight: 140 }}>
-                <ResponsiveContainer width="100%" height={140} minHeight={140}>
+              <div className="aspect-square w-full min-h-[120px]">
+                <ResponsiveContainer width="100%" height="100%" minHeight={120}>
                   <BarChart data={stateBarData} layout="vertical" margin={{ left: 4, right: 4, top: 0, bottom: 0 }}>
                     <XAxis type="number" stroke="#999" tick={{ fontSize: 7 }} />
                     <YAxis type="category" dataKey="state" width={44} tick={{ fontSize: 6 }} stroke="#999" />

@@ -111,16 +111,6 @@ export function MapSlide({ isActive = true }: { isActive?: boolean }) {
           }}
           style={{ width: "100%", height: "100%" }}
           mapStyle="mapbox://styles/mapbox/light-v11"
-          transformRequest={(url: string) => {
-            // Proxy all Mapbox requests; must return absolute URL so Request() parses correctly
-            if (url && url.includes('mapbox.com')) {
-              const origin = typeof window !== 'undefined' ? window.location.origin : '';
-              return {
-                url: `${origin}/api/mapbox-proxy?url=${encodeURIComponent(url)}`,
-              };
-            }
-            return { url: url || '' };
-          }}
         >
           {/* Choropleth: population density */}
           <Source id="choropleth" type="geojson" data={CHOROPLETH_DATA}>
