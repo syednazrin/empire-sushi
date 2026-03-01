@@ -186,7 +186,7 @@ export default function Slide4bFinancials() {
                     />
                     <Tooltip
                       content={({ active, payload, label }) =>
-                        active && payload?.length && label ? renderTooltipContent(data, label) : null
+                        active && payload?.length && label != null ? renderTooltipContent(data, String(label)) : null
                       }
                     />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
@@ -300,7 +300,7 @@ export default function Slide4bFinancials() {
                       />
                       <Tooltip
                         content={({ active, payload, label }) =>
-                          active && payload?.length && label ? renderTooltipContent(data, label) : null
+                          active && payload?.length && label != null ? renderTooltipContent(data, String(label)) : null
                         }
                       />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
