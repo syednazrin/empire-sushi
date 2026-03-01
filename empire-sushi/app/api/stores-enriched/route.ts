@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 type Store = { name: string; address: string; lat: number; lng: number; brand: string };
-type EnrichedStore = Store & { state?: string; stateName?: string; district?: string };
+type EnrichedStore = Store & { state?: string; stateName?: string; district?: string; inMall?: boolean };
 
 function pointInRing([lng, lat]: number[], ring: number[][]): boolean {
   let inside = false;
@@ -65,22 +65,33 @@ export async function GET() {
       return NextResponse.json(stores.map((s) => ({ ...s, state: undefined, stateName: undefined, district: undefined })));
     }
   const features = geojson.features || [];
+  let mallMap: Record<string, boolean> = {};
+  try {
+    const mallPath = path.join(process.cwd(), 'public', 'data', 'store-mall.json');
+    mallMap = JSON.parse(fs.readFileSync(mallPath, 'utf-8'));
+  } catch {
+    // store-mall.json optional; run scripts/classify-stores-mall.js to generate
+  }
+
   const enriched: EnrichedStore[] = stores.map((store) => {
+    let state: string | undefined;
+    let stateName: string | undefined;
+    let district: string | undefined;
     for (const f of features) {
       const geom = f.geometry;
       const props = f.properties || {};
       if (geom?.type === 'MultiPolygon' && geom.coordinates) {
         if (pointInMultiPolygon(store.lng, store.lat, geom.coordinates)) {
-          return {
-            ...store,
-            state: props.state,
-            stateName: STATE_CODE_TO_NAME[props.state] || props.state,
-            district: props.name,
-          };
+          state = props.state;
+          stateName = STATE_CODE_TO_NAME[props.state] || props.state;
+          district = props.name;
+          break;
         }
       }
     }
-    return { ...store, state: undefined, stateName: undefined, district: undefined };
+    const key = `${store.lng},${store.lat},${store.brand}`;
+    const inMall = mallMap[key] ?? undefined;
+    return { ...store, state, stateName, district, inMall };
   });
   console.log('Enriched stores:', enriched.length);
   return NextResponse.json(enriched);

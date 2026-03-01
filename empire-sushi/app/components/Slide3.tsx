@@ -20,7 +20,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { PieChart as PieIcon, BarChart3, Radar as RadarIcon, MapPin, AlertCircle, X, Search } from 'lucide-react';
+import { PieChart as PieIcon, BarChart3, Radar as RadarIcon, MapPin, AlertCircle, X, Search, Building2 } from 'lucide-react';
 import { competitiveAreas, topContestedStores, isTier1District, circlePolygon } from '../utils/geo';
 import type { StoreWithCoord } from '../utils/geo';
 
@@ -59,7 +59,7 @@ export default function Slide3() {
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [stores, setStores] = useState<{ name: string; address: string; lat: number; lng: number; brand: string }[]>([]);
-  const [enriched, setEnriched] = useState<{ brand: string; state?: string; stateName?: string; district?: string }[]>([]);
+  const [enriched, setEnriched] = useState<{ brand: string; state?: string; stateName?: string; district?: string; inMall?: boolean }[]>([]);
   const [choroplethGeoJSON, setChoroplethGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
   const [metric, setMetric] = useState('Population (k)');
   const [panelInView, setPanelInView] = useState(false);
@@ -284,6 +284,27 @@ export default function Slide3() {
     .map(({ district, count }) => ({ district: district.length > 14 ? district.slice(0, 14) + '…' : district, count }));
 
   const allBrands = Array.from(new Set(stores.map((s) => s.brand))).sort((a, b) => a === 'Empire Sushi' ? -1 : b === 'Empire Sushi' ? 1 : a.localeCompare(b));
+
+  const mallStats = useMemo(() => {
+    const withMall = enriched.filter((e) => e.inMall === true);
+    const withoutMall = enriched.filter((e) => e.inMall === false);
+    const unknown = enriched.filter((e) => e.inMall === undefined);
+    const byBrand: { [brand: string]: { total: number; inMall: number } } = {};
+    enriched.forEach((e) => {
+      if (!byBrand[e.brand]) byBrand[e.brand] = { total: 0, inMall: 0 };
+      byBrand[e.brand].total += 1;
+      if (e.inMall === true) byBrand[e.brand].inMall += 1;
+    });
+    const totalKnown = withMall.length + withoutMall.length;
+    return {
+      inMallCount: withMall.length,
+      notInMallCount: withoutMall.length,
+      unknownCount: unknown.length,
+      totalKnown,
+      pctInMall: totalKnown > 0 ? Math.round((withMall.length / totalKnown) * 100) : 0,
+      byBrand,
+    };
+  }, [enriched]);
 
   const storesWithCoord: StoreWithCoord[] = useMemo(() => {
     const byKey = new Map<string, StoreWithCoord>();
@@ -643,6 +664,49 @@ export default function Slide3() {
               </button>
             </div>
 
+            {/* Mall presence */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              <h3 className="font-serif text-sm text-[#1a1a1a] mb-2 flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-[#2563eb]" />
+                Mall presence
+              </h3>
+              {mallStats.totalKnown === 0 ? (
+                <p className="text-[10px] text-gray-500">Run <code className="bg-gray-100 px-1 rounded">node scripts/classify-stores-mall.js</code> with OPENAI_API_KEY to classify stores.</p>
+              ) : (
+                <>
+                  <div className="flex gap-3 mb-2">
+                    <div>
+                      <p className="text-lg font-bold text-[#1a1a1a] tabular-nums">{mallStats.inMallCount}</p>
+                      <p className="text-[10px] text-gray-500">In malls ({mallStats.pctInMall}%)</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-[#1a1a1a] tabular-nums">{mallStats.notInMallCount}</p>
+                      <p className="text-[10px] text-gray-500">Not in malls</p>
+                    </div>
+                  </div>
+                  {mallStats.byBrand[selectedBrand] && (
+                    <p className="text-[10px] text-gray-600 mb-2">
+                      <strong>{selectedBrand}:</strong> {mallStats.byBrand[selectedBrand].inMall} of {mallStats.byBrand[selectedBrand].total} in malls
+                      ({mallStats.byBrand[selectedBrand].total > 0 ? Math.round((mallStats.byBrand[selectedBrand].inMall / mallStats.byBrand[selectedBrand].total) * 100) : 0}%)
+                    </p>
+                  )}
+                  <div className="max-h-24 overflow-y-auto space-y-0.5">
+                    {allBrands.map((brand) => {
+                      const s = mallStats.byBrand[brand];
+                      if (!s || s.total === 0) return null;
+                      const pct = s.total > 0 ? Math.round((s.inMall / s.total) * 100) : 0;
+                      return (
+                        <div key={brand} className="flex justify-between text-[10px]">
+                          <span className="truncate font-medium" style={{ color: BRAND_COLORS[brand] || '#333' }}>{brand}</span>
+                          <span className="tabular-nums text-gray-600">{s.inMall}/{s.total} ({pct}%)</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
             {/* Market gap */}
             {marketGapDistricts.length > 0 && (
               <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -670,6 +734,9 @@ export default function Slide3() {
                 />
               </div>
               <p className="text-xs font-medium text-gray-600 mt-1">{saturationScore}%</p>
+              <p className="text-[9px] text-gray-400 mt-1.5 leading-tight">
+                How many stores per district {selectedBrand} has (in districts where it operates) vs the national average stores per district (all brands). Higher = more concentrated in fewer districts.
+              </p>
             </div>
 
             {/* Proximity table – top 5 contested */}

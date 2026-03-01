@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "npm run convert-data && next build",
     "convert-data": "node scripts/convert-data-to-json.js",
+    "classify-malls": "node scripts/classify-stores-mall.js",
     "start": "next start",
     "lint": "eslint"
   },
