@@ -394,6 +394,7 @@ export default function Slide3() {
   const contestedStores = useMemo(() => topContestedStores(storesWithCoord, 5), [storesWithCoord]);
 
   const stateBarData = useMemo(() => {
+    const totalBrand = byBrand[selectedBrand] || 0;
     const byStateBrand = enriched.reduce<{ [state: string]: { [brand: string]: number } }>((acc, s) => {
       const state = s.stateName || s.state || 'Unknown';
       if (!acc[state]) acc[state] = {};
@@ -401,10 +402,19 @@ export default function Slide3() {
       return acc;
     }, {});
     return Object.entries(byStateBrand)
-      .map(([state, counts]) => ({ state: state.length > 12 ? state.slice(0, 12) + '…' : state, count: counts[selectedBrand] || 0 }))
+      .map(([state, counts]) => {
+        const count = counts[selectedBrand] || 0;
+        const pct = totalBrand > 0 ? (count / totalBrand) * 100 : 0;
+        return {
+          state: state.length > 12 ? state.slice(0, 12) + '…' : state,
+          stateFull: state,
+          count,
+          pct,
+        };
+      })
       .filter((d) => d.count > 0)
       .sort((a, b) => b.count - a.count);
-  }, [enriched, selectedBrand]);
+  }, [enriched, selectedBrand, byBrand]);
 
   const allDistricts = useMemo(() => Array.from(new Set(enriched.map((e) => e.district).filter(Boolean))), [enriched]);
   const brandDistricts = useMemo(() => new Set(enriched.filter((e) => e.brand === selectedBrand).map((e) => e.district).filter(Boolean)), [enriched, selectedBrand]);
@@ -586,7 +596,18 @@ export default function Slide3() {
                   <BarChart data={stateBarData} layout="vertical" margin={{ left: 4, right: 4, top: 0, bottom: 0 }}>
                     <XAxis type="number" stroke="#999" tick={{ fontSize: 7 }} />
                     <YAxis type="category" dataKey="state" width={44} tick={{ fontSize: 6 }} stroke="#999" />
-                    <Tooltip />
+                    <Tooltip
+                      content={({ active, payload }) =>
+                        active && payload?.length ? (
+                          <div className="bg-white border border-gray-200 rounded shadow-lg px-2 py-1.5 text-xs">
+                            <div className="font-medium">{(payload[0].payload as { stateFull: string }).stateFull}</div>
+                            <div className="text-gray-600">
+                              {payload[0].value} stores ({((payload[0].payload as { pct: number }).pct).toFixed(1)}%)
+                            </div>
+                          </div>
+                        ) : null
+                      }
+                    />
                     <Bar dataKey="count" fill={BRAND_COLORS[selectedBrand] || EMPIRE_RED} radius={[0, 3, 3, 0]} name="Stores" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -860,7 +881,18 @@ export default function Slide3() {
                   <BarChart data={stateBarData} layout="vertical" margin={{ left: 20, right: 20 }}>
                     <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} />
                     <YAxis type="category" dataKey="state" width={100} tick={{ fontSize: 11 }} stroke="#999" />
-                    <Tooltip />
+                    <Tooltip
+                      content={({ active, payload }) =>
+                        active && payload?.length ? (
+                          <div className="bg-white border border-gray-200 rounded shadow-lg px-3 py-2 text-sm">
+                            <div className="font-medium">{(payload[0].payload as { stateFull: string }).stateFull}</div>
+                            <div className="text-gray-600">
+                              {payload[0].value} stores ({((payload[0].payload as { pct: number }).pct).toFixed(1)}%)
+                            </div>
+                          </div>
+                        ) : null
+                      }
+                    />
                     <Bar dataKey="count" fill={BRAND_COLORS[selectedBrand] || EMPIRE_RED} radius={[0, 6, 6, 0]} name="Stores" />
                   </BarChart>
                 </ResponsiveContainer>
