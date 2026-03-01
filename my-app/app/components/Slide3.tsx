@@ -728,9 +728,18 @@ export default function Slide3() {
                 />
               </div>
               <p className="text-xs font-medium text-gray-600 mt-1">{saturationScore}%</p>
-              <p className="text-[9px] text-gray-400 mt-1.5 leading-tight">
-                How many stores per district {selectedBrand} has (in districts where it operates) vs the national average stores per district (all brands). Higher = more concentrated in fewer districts.
-              </p>
+              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
+                <p className="text-[9px] text-gray-600 font-medium">What it means</p>
+                <p className="text-[9px] text-gray-500 leading-tight">
+                  <strong>National avg</strong> = total stores (all brands) ÷ number of districts with at least one store. <strong>Brand avg</strong> = {selectedBrand} stores ÷ districts {selectedBrand} is in.
+                </p>
+                <p className="text-[9px] text-gray-500 leading-tight font-mono bg-gray-50 px-1.5 py-1 rounded">
+                  Score = (brand avg ÷ national avg) × 50, max 100%
+                </p>
+                <p className="text-[9px] text-gray-500 leading-tight">
+                  Higher % = more stores per district than the market (concentrated). Lower % = fewer (spread out). ~50% = in line with national density.
+                </p>
+              </div>
             </div>
 
             {/* Proximity table – top 5 contested */}
