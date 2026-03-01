@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const BRAND_FROM_FILENAME = {
+  'Aeon_Cleaned.xlsx': 'Aeon',
   'Empire_Sushi_Cleaned.xlsx': 'Empire Sushi',
   'Family_Mart_Cleaned.xlsx': 'Family Mart',
   'Nippon_Sushi_Cleaned.xlsx': 'Nippon Sushi',

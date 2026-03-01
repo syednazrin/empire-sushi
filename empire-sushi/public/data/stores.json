@@ -1,5 +1,250 @@
 [
   {
+    "name": "AEON Setia Alam",
+    "address": "Lot 101 (LG, UG, L1), Setia City Mall 7, Persiaran Setia Dagang Bandar Setia Alam Seksyen U13, Setia Alam 40170 Shah Alam, Selangor",
+    "lat": 3.1082469,
+    "lng": 101.4615304,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Bukit Raja",
+    "address": "Persiaran Bukit Raja 2 Bandar Baru Klang, 41150 Klang, Selangor.",
+    "lat": 3.0601408,
+    "lng": 101.471166,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Shah Alam",
+    "address": "AEON Mall Shah Alam, No.1, Jalan Akuatik 13/64, Seksyen 13, 40100 Shah Alam, Selangor.",
+    "lat": 3.0767621,
+    "lng": 101.5482713,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Rawang Anggun",
+    "address": "No. 1, Kompleks Beli-belah AEON Rawang Anggun, Persiaran Anggun, Taman Anggun, 48000 Rawang, Selangor Darul Ehsan.",
+    "lat": 3.3179195,
+    "lng": 101.5365233,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Cheras Selatan",
+    "address": "Aras Satu, Lebuh Tun Hussien Onn, 43200 Balakong, Selangor Darul Ehsan.",
+    "lat": 3.0526265,
+    "lng": 101.7741628,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Bukit Tinggi",
+    "address": "AEON Bukit Tinggi Store & Shopping Centre, No 1, Persiaran Batu Nilam 1/KS 6, Bandar Bukit Tinggi 2, 41200 Klang, Selangor Darul Ehsan.",
+    "lat": 2.9935685,
+    "lng": 101.4443686,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Taman Equine Shopping Centre",
+    "address": "No. 2, Jalan Equine Taman Equine, Bandar Putra Permai, 43300 Seri Kembangan, Selangor Darul Ehsan.",
+    "lat": 2.9952482,
+    "lng": 101.6746319,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON MaxValu Prime Evo Bangi",
+    "address": "No. G.09, Ground Floor, Kompleks Evo, Jalan Pusat Bandar 2, 43650 Bandar Baru Bangi.",
+    "lat": 2.9625652,
+    "lng": 101.7556507,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON MaxValu Prime Selayang",
+    "address": "Lot LG.45, Lower Ground Floor, Selayang Mall, Jalan SU9, Taman Selayang Utama, 68100 Batu Cave.",
+    "lat": 3.2374855,
+    "lng": 101.6440748,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Kuching Central",
+    "address": "No 88, Lot 3458, Block 10 KCLD, Jalan Datuk Patinggi Ahmad Zaidi Adruce, 93150 Kuching, Sarawak.",
+    "lat": 1.5057381,
+    "lng": 110.3477305,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Kinta City",
+    "address": "No 2, Jalan Teh Lean Swee, Off Jalan Sultan Azlan Shah Utara, 31400 Ipoh, Perak.",
+    "lat": 4.6139764,
+    "lng": 101.1186528,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Ipoh Station 18",
+    "address": "No.2, Susuran Stesen 18, Station 18, 31650 Ipoh, Perak.",
+    "lat": 4.5460309,
+    "lng": 101.0699666,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Seri Manjung",
+    "address": "Pusat Perniagaan Manjung Point 3, 32040 Seri Manjung, Perak.",
+    "lat": 4.21575,
+    "lng": 100.666247,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Taiping",
+    "address": "Lot 8576 & 8577, Jalan Kamunting, 34000 Taiping, Perak.",
+    "lat": 4.8728328,
+    "lng": 100.7298157,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Seremban 2",
+    "address": "112 Persiaran S2 B1, Seremban 2, 70300 Seremban, Negeri Sembilan Darul Khusus.",
+    "lat": 2.7021885,
+    "lng": 101.9128149,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Nilai",
+    "address": "No 2, Persiaran Pusat Bandar, Putra Point, Putra Nilai, 71800 Nilai, Negeri Sembilan Darul Khusus.",
+    "lat": 2.8181299,
+    "lng": 101.7906505,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Palm Mall",
+    "address": "G-16, Ground Floor, Palm Mall Seremban, Kemayan Square, Jalan Sg Ujong, 70200 Seremban.",
+    "lat": 2.7198558,
+    "lng": 101.9229003,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Bukit Mertajam",
+    "address": "Management Office, Lot No. 30908, Jalan Rozhan Alma, Seberang Perai Tengah, 14000 Bukit Mertajam, Pulau Pinang.",
+    "lat": 5.3203009,
+    "lng": 100.4779465,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Alpha Angle",
+    "address": "Jalan R1, Seksyen 1, Bandar Baru Wangsa Maju, 53300 Kuala Lumpur.",
+    "lat": 3.2046482,
+    "lng": 101.7274695,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Taman Maluri Shopping Centre",
+    "address": "Jalan Jejaka, Taman Maluri Cheras, 55100 Kuala Lumpur.",
+    "lat": 3.1275076,
+    "lng": 101.7322692,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Metro Prima",
+    "address": "No 1, Jalan Metro Prima Kepong, 52100 Kuala Lumpur.",
+    "lat": 3.2138818,
+    "lng": 101.6372065,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall AU2",
+    "address": "Setiawangsa, Lower Ground Floor, No.6 Jalan Taman Setiawangsa (Jalan 37/56), AU2, Taman Keramat, 54200 Kuala Lumpur.",
+    "lat": 3.1782116,
+    "lng": 101.7507808,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON MaxValu Prime Desa ParkCity",
+    "address": "No. GF 22, The Waterfront @ ParkCity, No. 5 Persiaran Residen, Desa ParkCity, 52200 Kuala Lumpur.",
+    "lat": 3.1869487,
+    "lng": 101.6277335,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON MaxValu Prime Sunway Velocity",
+    "address": "B-01, Basement One, Sunway Velocity Mall, Lingkaran SV, Sunway Velocity, 55100 Kuala Lumpur.",
+    "lat": 3.1278714,
+    "lng": 101.7248453,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON MaxValu Prime The Sphere Bangsar South",
+    "address": "Unit LG-1A, Level LG, The Sphere, No. 1, Avenue 1, Bangsar South, No. 8, Jalan Kerinchi, 59200 Kuala Lumpur.",
+    "lat": 3.1107845,
+    "lng": 101.6676501,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON United Point",
+    "address": "Lot LG-3, Level LG, Pusat Perdagangan Berpadu (United Point), No. 10, Jalan Lang Emas, 51200 Kuala Lumpur.",
+    "lat": 3.1909351,
+    "lng": 101.6535374,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Melaka Shopping Centre",
+    "address": "Leboh Ayer Keroh, 75450 Melaka,",
+    "lat": 2.2724771,
+    "lng": 102.285267,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Bandaraya Melaka",
+    "address": "No.2 Jalan Legenda, Taman 1 – Legenda, 75400 Melaka.",
+    "lat": 2.2187664,
+    "lng": 102.2519308,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Kulaijaya",
+    "address": "PTD 106273, Persiaran Indahpura Utama, Bandar Indahpura, 81000 Kulaijaya, Johor.",
+    "lat": 1.6353379,
+    "lng": 103.6154572,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Permas Jaya Shopping Centre",
+    "address": "No 1, Jalan Permas Jaya Utara, Bandar Baru Permas Jaya, 81750 Johor Bahru, Johor.",
+    "lat": 1.4956947,
+    "lng": 103.815467,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Tebrau City",
+    "address": "No 1, Jalan Desa Tebrau, Taman Desa Tebrau, 81100 Johor Bahru, Johor.",
+    "lat": 1.5626154,
+    "lng": 103.791601,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Bandar Dato’ Onn",
+    "address": "No.3, Jalan Dato’ Onn 3, Bandar Dato’ Onn, 81100 Johor Bahru, Johor.",
+    "lat": 1.5638455,
+    "lng": 103.7353653,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Danga Bay",
+    "address": "Lot No. G31, G32, G33, G34 & G38, Bele Time Mall, Country Garden @ Danga Bay, Jalan Skudai, 80200 Johor Bahru.",
+    "lat": 1.4642404,
+    "lng": 103.7290203,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON Mall Kota Bharu",
+    "address": "Pusat Beli-Belah Kota Bharu, Lembah Sireh, 15050, Kota Bharu, Kelantan.",
+    "lat": 6.1150863,
+    "lng": 102.2310784,
+    "brand": "Aeon"
+  },
+  {
+    "name": "AEON STYLE Taman Maluri",
+    "address": "Management Office, 1st Floor, AEON Mall Taman Maluri, Jalan Jejaka, Taman Maluri, Cheras, 55100 Kuala Lumpur.",
+    "lat": 3.1259253,
+    "lng": 101.7283988,
+    "brand": "Aeon"
+  },
+  {
     "name": "Berjaya Times Square",
     "address": "LG-18D-2, Berjaya Times Square, 1, Jalan Imbi, 55100, Wilayah Persekutuan Kuala Lumpur",
     "lat": 3.1281737,

@@ -33,6 +33,7 @@ const CHOROPLETH_METRICS = [
 ];
 
 const BRAND_COLORS: { [key: string]: string } = {
+  'Aeon': '#2563eb',
   'Empire Sushi': '#ff1744',
   'Sushi Mentai': '#6b9b8a',
   'Sushi King': '#8a9b6b',
@@ -317,7 +318,7 @@ export default function Slide3() {
           id: 'conflict-zones-fill',
           type: 'fill',
           source: 'conflict-zones',
-          paint: { 'fill-color': '#ff6b4a', 'fill-opacity': 0.2 },
+          paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.2 },
         });
       }
     };
