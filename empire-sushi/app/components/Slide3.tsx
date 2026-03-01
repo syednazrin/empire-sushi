@@ -654,6 +654,14 @@ export default function Slide3() {
               </h3>
               <p className="text-2xl font-bold text-[#1a1a1a] tabular-nums">{competitiveAreasCount}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">Store locations with ≥1 competitor within 1 km</p>
+              {brandStoresCount > 0 && (
+                <div className="mt-2 pt-2 border-t border-gray-100">
+                  <p className="text-[10px] text-gray-500 mb-0.5">{selectedBrand} in competitive areas</p>
+                  <p className="text-sm font-semibold text-[#1a1a1a] tabular-nums">
+                    {brandInCompetitiveAreas} of {brandStoresCount} stores ({Math.round((brandInCompetitiveAreas / brandStoresCount) * 100)}%)
+                  </p>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setShowConflictZones((v) => !v)}
