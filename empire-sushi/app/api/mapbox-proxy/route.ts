@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Server-side Mapbox token (never exposed to client)
-// Falls back to NEXT_PUBLIC if server-side token not set (for backwards compatibility)
+// Server-side Mapbox token (from environment variables)
 const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-
-if (!MAPBOX_TOKEN) {
-  console.error('MAPBOX_TOKEN is not set in environment variables');
-}
 
 // Allowed Mapbox domains for security
 const ALLOWED_DOMAINS = [
@@ -21,15 +16,6 @@ const ALLOWED_DOMAINS = [
 
 export async function GET(request: NextRequest) {
   try {
-    // Check if token is available
-    if (!MAPBOX_TOKEN) {
-      console.error('MAPBOX_TOKEN is not set in environment variables');
-      return NextResponse.json(
-        { error: 'Server configuration error: MAPBOX_TOKEN not set' },
-        { status: 500, headers: corsHeaders() }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const targetUrl = searchParams.get('url');
 
@@ -62,12 +48,9 @@ export async function GET(request: NextRequest) {
     const urlWithToken = urlObj.toString();
 
     const response = await fetch(urlWithToken, {
-      // Forward relevant headers
       headers: {
         'User-Agent': request.headers.get('user-agent') || 'Empire-Sushi-Proxy',
       },
-      // Add timeout to prevent hanging requests
-      signal: AbortSignal.timeout(10000), // 10 second timeout
     });
 
     if (!response.ok) {
