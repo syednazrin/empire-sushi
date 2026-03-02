@@ -21,6 +21,15 @@ const ALLOWED_DOMAINS = [
 
 export async function GET(request: NextRequest) {
   try {
+    // Check if token is available
+    if (!MAPBOX_TOKEN) {
+      console.error('MAPBOX_TOKEN is not set in environment variables');
+      return NextResponse.json(
+        { error: 'Server configuration error: MAPBOX_TOKEN not set' },
+        { status: 500, headers: corsHeaders() }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const targetUrl = searchParams.get('url');
 
