@@ -14,6 +14,7 @@ import {
   Bar,
   XAxis,
   YAxis,
+  CartesianGrid,
   Tooltip,
   PieChart,
   Pie,
@@ -21,13 +22,17 @@ import {
   Legend,
   LineChart,
   Line,
+  ScatterChart,
+  Scatter,
+  ZAxis,
 } from 'recharts';
 import { PieChart as PieIcon, BarChart3, Radar as RadarIcon, MapPin, AlertCircle, X, Search, Building2, Users, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 import { competitiveAreas, topContestedStores, isTier1District, circlePolygon } from '../utils/geo';
 import type { StoreWithCoord } from '../utils/geo';
 
-// Token only used as fallback; tiles/styles are fetched via /api/mapbox-proxy (server adds real token)
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'proxy';
+// All tiles/styles are fetched via /api/mapbox-proxy (server adds real token)
+// No token needed on client side
+mapboxgl.accessToken = 'pk.proxy';
 
 type DistrictData = {
   state: string[];
@@ -81,7 +86,7 @@ export default function Slide3() {
   const [districtCount, setDistrictCount] = useState(12);
   const [districtSearch, setDistrictSearch] = useState('');
   const [contestedSearch, setContestedSearch] = useState('');
-  type ChartId = 'pie' | 'bar' | 'state-bar' | 'performance-radar' | 'competitive-areas' | 'mall-presence' | 'market-gap' | 'saturation' | 'contested-stores' | 'focus-brand';
+  type ChartId = 'pie' | 'bar' | 'state-bar' | 'performance-radar' | 'competitive-areas' | 'mall-presence' | 'market-gap' | 'saturation' | 'contested-stores' | 'focus-brand' | 'district-trend' | 'district-ethnicity-pie' | 'district-age' | 'demographics-growth' | 'demographics-growth-competitors' | 'demographics-halal' | 'demographics-female-genz' | 'demographics-market-potential';
   const [expandedChart, setExpandedChart] = useState<ChartId | null>(null);
   const expandableClass = 'cursor-pointer hover:shadow-md hover:border-[var(--accent-coral)]/30 transition-all focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)] focus:ring-offset-2';
   const panelRef = useRef<HTMLDivElement>(null);
@@ -91,9 +96,26 @@ export default function Slide3() {
   const [districtData, setDistrictData] = useState<DistrictData | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
   const [selectedState, setSelectedState] = useState<string | null>(null);
-  const [demographicMetric, setDemographicMetric] = useState<'genz' | 'ethnicity'>('genz');
+  const [demographicMetric, setDemographicMetric] = useState<'genz' | 'growth' | 'chinese_pct' | 'malay_pct' | 'sushi_gap'>('genz');
   const [districtGeoJSON, setDistrictGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
   const [mapLegendCollapsed, setMapLegendCollapsed] = useState(false);
+  
+  // High-growth districts data
+  type GrowthDistrictData = {
+    district: string;
+    pop2020: number;
+    pop2024: number;
+    growthPct: number;
+    absoluteGrowth: number;
+    empireCount: number;
+    sushiKingCount: number;
+    familyMartCount: number;
+    sushiZanmaiCount: number;
+    sushiJiroCount: number;
+    sushiPlusCount: number;
+    totalCompetitors: number;
+  };
+  const [growthDistricts, setGrowthDistricts] = useState<GrowthDistrictData[]>([]);
 
   useEffect(() => {
     fetch('/api/stores')
@@ -114,6 +136,11 @@ export default function Slide3() {
       .then((r) => r.json())
       .then((data) => setDistrictGeoJSON(data))
       .catch(() => setDistrictGeoJSON(null));
+    // Load district growth analysis
+    fetch('/data/district-growth-analysis.json')
+      .then((r) => r.json())
+      .then((data: GrowthDistrictData[]) => setGrowthDistricts(data))
+      .catch(() => setGrowthDistricts([]));
   }, []);
 
   useEffect(() => {
@@ -561,6 +588,80 @@ export default function Slide3() {
     return Array.from(new Set(districtData.district)).sort();
   }, [districtData]);
 
+  // Population growth by district (2020 → 2024)
+  const districtPopulationGrowth = useMemo(() => {
+    if (!districtData) return [];
+    const byDistrict: { [key: string]: { pop2020: number; pop2024: number; growthPct: number; state: string } } = {};
+    const dates = districtData.date;
+    const districts = districtData.district;
+    const states = districtData.state;
+    const pops = districtData.population;
+    const sex = districtData.sex;
+    const age = districtData.age;
+    const ethnicity = districtData.ethnicity;
+    for (let i = 0; i < districts.length; i++) {
+      if (sex[i] !== 'both' || age[i] !== 'overall' || ethnicity[i] !== 'overall') continue;
+      const d = districts[i];
+      if (!byDistrict[d]) byDistrict[d] = { pop2020: 0, pop2024: 0, growthPct: 0, state: states[i] || '' };
+      if (dates[i] === '2020-01-01') byDistrict[d].pop2020 = pops[i];
+      if (dates[i] === '2024-01-01') byDistrict[d].pop2024 = pops[i];
+    }
+    return Object.entries(byDistrict)
+      .filter(([, v]) => v.pop2020 > 0 && v.pop2024 > 0)
+      .map(([district, v]) => ({
+        district,
+        state: v.state,
+        pop2020: v.pop2020,
+        pop2024: v.pop2024,
+        growthPct: ((v.pop2024 - v.pop2020) / v.pop2020) * 100,
+      }))
+      .sort((a, b) => b.growthPct - a.growthPct)
+      .slice(0, 15);
+  }, [districtData]);
+
+  // Gender breakdown by district (2024) and national
+  const genderByDistrict = useMemo(() => {
+    if (!districtData) return { national: { male: 0, female: 0, total: 0, femalePct: 0 }, byDistrict: [] };
+    let nationalMale = 0, nationalFemale = 0;
+    const map = new Map<string, { district: string; state: string; male: number; female: number }>();
+    const dates = districtData.date;
+    const districts = districtData.district;
+    const states = districtData.state;
+    const pops = districtData.population;
+    const sex = districtData.sex;
+    const age = districtData.age;
+    const ethnicity = districtData.ethnicity;
+    for (let i = 0; i < districts.length; i++) {
+      if (dates[i] !== '2024-01-01' || age[i] !== 'overall' || ethnicity[i] !== 'overall') continue;
+      const d = districts[i];
+      const s = sex[i];
+      const pop = pops[i];
+      if (s === 'male') {
+        nationalMale += pop;
+        if (!map.has(d)) map.set(d, { district: d, state: states[i] || '', male: 0, female: 0 });
+        map.get(d)!.male = pop;
+      } else if (s === 'female') {
+        nationalFemale += pop;
+        if (!map.has(d)) map.set(d, { district: d, state: states[i] || '', male: 0, female: 0 });
+        map.get(d)!.female = pop;
+      }
+    }
+    const nationalTotal = nationalMale + nationalFemale;
+    const byDistrict = Array.from(map.values())
+      .map((r) => ({
+        ...r,
+        total: r.male + r.female,
+        femalePct: r.male + r.female > 0 ? (r.female / (r.male + r.female)) * 100 : 0,
+      }))
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 12);
+    return {
+      national: { male: nationalMale, female: nationalFemale, total: nationalTotal, femalePct: nationalTotal > 0 ? (nationalFemale / nationalTotal) * 100 : 0 },
+      byDistrict,
+    };
+  }, [districtData]);
+
   // Compute Gen Z population and primary ethnicity for each district
   const districtGenZData = useMemo(() => {
     if (!districtData || !districtGeoJSON) return null;
@@ -643,13 +744,196 @@ export default function Slide3() {
     return result;
   }, [districtData, districtGeoJSON]);
 
-  // Generate demographic choropleth (Gen Z or Ethnicity based)
+  // Per-district ethnicity percentages (2024) for concentration indexing
+  const districtEthnicityPct = useMemo(() => {
+    if (!districtData) return {} as { [district: string]: { state: string; chinesePct: number; malayPct: number; indianPct: number; totalPop: number } };
+    const dates = districtData.date;
+    const districts = districtData.district;
+    const states = districtData.state;
+    const pops = districtData.population;
+    const sex = districtData.sex;
+    const age = districtData.age;
+    const ethnicity = districtData.ethnicity;
+    const map: { [d: string]: { state: string; chinese: number; malay: number; indian: number; total: number } } = {};
+    for (let i = 0; i < districts.length; i++) {
+      if (dates[i] !== '2024-01-01' || sex[i] !== 'both' || age[i] !== 'overall') continue;
+      const d = districts[i];
+      if (!map[d]) map[d] = { state: states[i] || '', chinese: 0, malay: 0, indian: 0, total: 0 };
+      const eth = ethnicity[i];
+      const pop = pops[i];
+      map[d].total += pop;
+      if (eth === 'chinese') map[d].chinese += pop;
+      else if (eth === 'bumi_malay') map[d].malay += pop;
+      else if (eth === 'indian') map[d].indian += pop;
+    }
+    const out: { [district: string]: { state: string; chinesePct: number; malayPct: number; indianPct: number; totalPop: number } } = {};
+    Object.entries(map).forEach(([d, v]) => {
+      const t = v.total;
+      out[d] = {
+        state: v.state,
+        totalPop: t,
+        chinesePct: t > 0 ? (v.chinese / t) * 100 : 0,
+        malayPct: t > 0 ? (v.malay / t) * 100 : 0,
+        indianPct: t > 0 ? (v.indian / t) * 100 : 0,
+      };
+    });
+    return out;
+  }, [districtData]);
+
+  // Store count per district (from enriched)
+  const districtStoreCount = useMemo(() => {
+    const count: { [district: string]: number } = {};
+    const empireCount: { [district: string]: number } = {};
+    enriched.forEach((e) => {
+      const d = e.district;
+      if (d) {
+        count[d] = (count[d] || 0) + 1;
+        if (e.brand === 'Empire Sushi') {
+          empireCount[d] = (empireCount[d] || 0) + 1;
+        }
+      }
+    });
+    return { total: count, empire: empireCount };
+  }, [enriched]);
+
+  // Combined investor metrics per district: growth, Gen Z, ethnicity %, store count, sushi gap
+  const districtInvestorMetrics = useMemo(() => {
+    const growthByDistrict: { [d: string]: number } = {};
+    districtPopulationGrowth.forEach((r) => { growthByDistrict[r.district] = r.growthPct; });
+    const out: {
+      [district: string]: {
+        state: string;
+        genZPop: number;
+        genZPct: number;
+        totalPop: number;
+        growthPct: number;
+        chinesePct: number;
+        malayPct: number;
+        indianPct: number;
+        storeCount: number;
+        sushiGap: number; // pop per store (higher = opportunity)
+      };
+    } = {} as any;
+    if (!districtGenZData) return out;
+    Object.entries(districtGenZData).forEach(([district, data]) => {
+      const storeCount = districtStoreCount.total[district] ?? 0;
+      const pop = data.totalPop || 0;
+      const eth = districtEthnicityPct[district];
+      const stateFromGrowth = districtPopulationGrowth.find((r) => r.district === district)?.state;
+      out[district] = {
+        state: eth?.state ?? stateFromGrowth ?? '',
+        genZPop: data.genZPop,
+        genZPct: data.genZPct,
+        totalPop: data.totalPop,
+        growthPct: growthByDistrict[district] ?? 0,
+        chinesePct: eth?.chinesePct ?? 0,
+        malayPct: eth?.malayPct ?? 0,
+        indianPct: eth?.indianPct ?? 0,
+        storeCount,
+        sushiGap: storeCount >= 0 ? pop / (storeCount + 1) : pop,
+      };
+    });
+    districtPopulationGrowth.forEach((r) => {
+      if (out[r.district]) out[r.district].state = r.state || out[r.district].state;
+    });
+    return out;
+  }, [districtGenZData, districtPopulationGrowth, districtEthnicityPct, districtStoreCount]);
+
+  // Gen Z vs Growth scatter (and bubble) data
+  const genZGrowthScatterData = useMemo(() => {
+    return Object.entries(districtInvestorMetrics)
+      .filter(([, v]) => v.totalPop > 0 && v.growthPct !== undefined)
+      .map(([district, v]) => ({
+        district,
+        state: v.state,
+        genZPct: v.genZPct,
+        growthPct: v.growthPct,
+        genZPop: v.genZPop,
+        totalPop: v.totalPop,
+      }))
+      .sort((a, b) => b.genZPop - a.genZPop);
+  }, [districtInvestorMetrics]);
+
+  // Halal opportunity: high Malay % + low store coverage
+  const halalOpportunityDistricts = useMemo(() => {
+    return Object.entries(districtInvestorMetrics)
+      .filter(([, v]) => v.malayPct >= 70 && v.storeCount <= 2 && v.totalPop >= 20)
+      .map(([district, v]) => ({ district, state: v.state, malayPct: v.malayPct, storeCount: v.storeCount, totalPop: v.totalPop, sushiGap: v.sushiGap }))
+      .sort((a, b) => b.sushiGap - a.sushiGap)
+      .slice(0, 15);
+  }, [districtInvestorMetrics]);
+
+  // Female Gen Z (10-24) share by district for top 10 by Gen Z pop
+  const femaleGenZByDistrict = useMemo(() => {
+    if (!districtData) return [];
+    const genZAges = ['10-14', '15-19', '20-24'];
+    const dates = districtData.date;
+    const districts = districtData.district;
+    const states = districtData.state;
+    const pops = districtData.population;
+    const sex = districtData.sex;
+    const age = districtData.age;
+    const ethnicity = districtData.ethnicity;
+    const byDistrict: { [d: string]: { state: string; male: number; female: number } } = {};
+    for (let i = 0; i < districts.length; i++) {
+      if (dates[i] !== '2024-01-01' || !genZAges.includes(age[i]) || ethnicity[i] !== 'overall') continue;
+      const d = districts[i];
+      if (!byDistrict[d]) byDistrict[d] = { state: states[i] || '', male: 0, female: 0 };
+      if (sex[i] === 'male') byDistrict[d].male += pops[i];
+      else if (sex[i] === 'female') byDistrict[d].female += pops[i];
+    }
+    const withPct = Object.entries(byDistrict)
+      .filter(([, v]) => v.male + v.female > 0)
+      .map(([district, v]) => ({
+        district,
+        state: v.state,
+        male: v.male,
+        female: v.female,
+        total: v.male + v.female,
+        femalePct: (v.female / (v.male + v.female)) * 100,
+        storeCount: districtStoreCount.total[district] ?? 0,
+        empireStoreCount: districtStoreCount.empire[district] ?? 0,
+      }));
+    const topByGenZ = Object.entries(districtGenZData || {})
+      .sort((a, b) => b[1].genZPop - a[1].genZPop)
+      .slice(0, 10)
+      .map(([d]) => d);
+    return withPct
+      .filter((r) => topByGenZ.includes(r.district))
+      .sort((a, b) => topByGenZ.indexOf(a.district) - topByGenZ.indexOf(b.district));
+  }, [districtData, districtGenZData, districtStoreCount]);
+
+  // Market potential score (0-100): growth + Gen Z + sushi gap + female Gen Z
+  const marketPotentialTopDistricts = useMemo(() => {
+    const arr = Object.entries(districtInvestorMetrics)
+      .filter(([, v]) => v.totalPop >= 10);
+    const growthArr = arr.map(([, v]) => v.growthPct);
+    const genZArr = arr.map(([, v]) => v.genZPct);
+    const gapArr = arr.map(([, v]) => v.sushiGap);
+    const maxG = Math.max(...growthArr, 0.01);
+    const maxZ = Math.max(...genZArr, 0.01);
+    const maxGap = Math.max(...gapArr, 1);
+    const femaleMap: { [d: string]: number } = {};
+    femaleGenZByDistrict.forEach((r) => { femaleMap[r.district] = r.femalePct; });
+    const scored = arr.map(([district, v]) => {
+      const growthNorm = (v.growthPct / maxG) * 100;
+      const genZNorm = v.genZPct;
+      const gapNorm = (v.sushiGap / maxGap) * 100;
+      const femaleNorm = femaleMap[district] ?? 50;
+      const score = 0.35 * Math.min(100, growthNorm) + 0.3 * genZNorm + 0.25 * gapNorm + 0.1 * (femaleNorm / 100) * 100;
+      return { district, state: v.state, score: Math.round(score), growthPct: v.growthPct, genZPct: v.genZPct, sushiGap: v.sushiGap };
+    });
+    return scored.sort((a, b) => b.score - a.score).slice(0, 15);
+  }, [districtInvestorMetrics, femaleGenZByDistrict]);
+
+  // Generate demographic choropleth (Gen Z, Growth, Chinese %, Malay %, Sushi gap)
   const demographicChoropleth = useMemo(() => {
     if (!districtGeoJSON || !districtGenZData) return null;
     
     const features = districtGeoJSON.features.map((feature: any) => {
       const districtName = feature.properties.name;
       const data = districtGenZData[districtName];
+      const inv = districtInvestorMetrics[districtName];
       
       if (!data) {
         return {
@@ -666,15 +950,41 @@ export default function Slide3() {
       let fillColor = '#e5e7eb';
       
       if (demographicMetric === 'genz') {
-        // Color by Gen Z population
         const genZPop = data.genZPop;
-        if (genZPop >= 100) fillColor = '#dc2626'; // High
-        else if (genZPop >= 50) fillColor = '#f97316'; // Medium-high
-        else if (genZPop >= 25) fillColor = '#fbbf24'; // Medium
-        else if (genZPop >= 10) fillColor = '#a3e635'; // Low-medium
-        else fillColor = '#d1d5db'; // Low
+        if (genZPop >= 100) fillColor = '#dc2626';
+        else if (genZPop >= 50) fillColor = '#f97316';
+        else if (genZPop >= 25) fillColor = '#fbbf24';
+        else if (genZPop >= 10) fillColor = '#a3e635';
+        else fillColor = '#d1d5db';
+      } else if (demographicMetric === 'growth') {
+        const g = inv?.growthPct ?? 0;
+        if (g >= 8) fillColor = '#166534';
+        else if (g >= 5) fillColor = '#16a34a';
+        else if (g >= 2) fillColor = '#84cc16';
+        else if (g >= 0) fillColor = '#e5e7eb';
+        else fillColor = '#d1d5db';
+      } else if (demographicMetric === 'chinese_pct') {
+        const c = inv?.chinesePct ?? 0;
+        if (c >= 40) fillColor = '#dc2626';
+        else if (c >= 25) fillColor = '#ea580c';
+        else if (c >= 15) fillColor = '#eab308';
+        else if (c >= 5) fillColor = '#a3e635';
+        else fillColor = '#e5e7eb';
+      } else if (demographicMetric === 'malay_pct') {
+        const m = inv?.malayPct ?? 0;
+        if (m >= 80) fillColor = '#166534';
+        else if (m >= 65) fillColor = '#16a34a';
+        else if (m >= 50) fillColor = '#84cc16';
+        else if (m >= 30) fillColor = '#e5e7eb';
+        else fillColor = '#d1d5db';
+      } else if (demographicMetric === 'sushi_gap') {
+        const gap = inv?.sushiGap ?? 0;
+        if (gap >= 200) fillColor = '#0e7490';
+        else if (gap >= 100) fillColor = '#0891b2';
+        else if (gap >= 50) fillColor = '#22d3ee';
+        else if (gap >= 20) fillColor = '#a5f3fc';
+        else fillColor = '#e5e7eb';
       } else {
-        // Color by primary ethnicity
         fillColor = data.ethnicityColor;
       }
       
@@ -688,6 +998,10 @@ export default function Slide3() {
           _totalPop: data.totalPop,
           _primaryEth: data.primaryEthnicity,
           _primaryEthPct: data.primaryEthnicityPct,
+          _growthPct: inv?.growthPct,
+          _chinesePct: inv?.chinesePct,
+          _malayPct: inv?.malayPct,
+          _sushiGap: inv?.sushiGap,
         },
       };
     });
@@ -696,7 +1010,7 @@ export default function Slide3() {
       type: 'FeatureCollection' as const,
       features,
     };
-  }, [districtGeoJSON, districtGenZData, demographicMetric]);
+  }, [districtGeoJSON, districtGenZData, districtInvestorMetrics, demographicMetric]);
 
   // Apply choropleth to map (either demographic or original based on active tab)
   useEffect(() => {
@@ -852,11 +1166,14 @@ export default function Slide3() {
                   {activeTab === 'demographics' ? (
                     <select
                       value={demographicMetric}
-                      onChange={(e) => setDemographicMetric(e.target.value as 'genz' | 'ethnicity')}
+                      onChange={(e) => setDemographicMetric(e.target.value as 'genz' | 'growth' | 'chinese_pct' | 'malay_pct' | 'sushi_gap')}
                       className="text-sm font-sans bg-transparent border-0 text-gray-800 font-medium focus:ring-0 focus:outline-none cursor-pointer w-full"
                     >
                       <option value="genz">Gen Z Hotspots (10-29 yrs)</option>
-                      <option value="ethnicity">Primary Ethnicity</option>
+                      <option value="growth">Population Growth (2020→24)</option>
+                      <option value="chinese_pct">Chinese % (concentration)</option>
+                      <option value="malay_pct">Malay % (Halal opportunity)</option>
+                      <option value="sushi_gap">Sushi Gap (pop per store)</option>
                     </select>
                   ) : (
                     <select
@@ -875,53 +1192,53 @@ export default function Slide3() {
                 {activeTab === 'demographics' && (
                   <div>
                     <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                      {demographicMetric === 'genz' ? 'Gen Z Population' : 'Primary Ethnicity'}
+                      {demographicMetric === 'genz' && 'Gen Z population'}
+                      {demographicMetric === 'growth' && 'Pop. growth % (2020→24)'}
+                      {demographicMetric === 'chinese_pct' && 'Chinese %'}
+                      {demographicMetric === 'malay_pct' && 'Malay % (Halal)'}
+                      {demographicMetric === 'sushi_gap' && 'Sushi gap (pop/store)'}
                     </p>
-                    {demographicMetric === 'genz' ? (
+                    {demographicMetric === 'genz' && (
                       <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#dc2626' }} />
-                          <span className="text-xs text-gray-700">≥100k</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#f97316' }} />
-                          <span className="text-xs text-gray-700">50-100k</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#fbbf24' }} />
-                          <span className="text-xs text-gray-700">25-50k</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#a3e635' }} />
-                          <span className="text-xs text-gray-700">10-25k</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#d1d5db' }} />
-                          <span className="text-xs text-gray-700">&lt;10k</span>
-                        </div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#dc2626' }} /><span className="text-xs text-gray-700">≥100k</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#f97316' }} /><span className="text-xs text-gray-700">50-100k</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#fbbf24' }} /><span className="text-xs text-gray-700">25-50k</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#a3e635' }} /><span className="text-xs text-gray-700">10-25k</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#d1d5db' }} /><span className="text-xs text-gray-700">&lt;10k</span></div>
                       </div>
-                    ) : (
+                    )}
+                    {demographicMetric === 'growth' && (
                       <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#16a34a' }} />
-                          <span className="text-xs text-gray-700">Bumi Malay</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#dc2626' }} />
-                          <span className="text-xs text-gray-700">Chinese</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#ea580c' }} />
-                          <span className="text-xs text-gray-700">Indian</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#0891b2' }} />
-                          <span className="text-xs text-gray-700">Bumi Other</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#7c3aed' }} />
-                          <span className="text-xs text-gray-700">Other Citizen</span>
-                        </div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#166534' }} /><span className="text-xs text-gray-700">≥8%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#16a34a' }} /><span className="text-xs text-gray-700">5-8%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#84cc16' }} /><span className="text-xs text-gray-700">2-5%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#e5e7eb' }} /><span className="text-xs text-gray-700">0-2%</span></div>
+                      </div>
+                    )}
+                    {demographicMetric === 'chinese_pct' && (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#dc2626' }} /><span className="text-xs text-gray-700">≥40%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#ea580c' }} /><span className="text-xs text-gray-700">25-40%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#eab308' }} /><span className="text-xs text-gray-700">15-25%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#a3e635' }} /><span className="text-xs text-gray-700">5-15%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#e5e7eb' }} /><span className="text-xs text-gray-700">&lt;5%</span></div>
+                      </div>
+                    )}
+                    {demographicMetric === 'malay_pct' && (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#166534' }} /><span className="text-xs text-gray-700">≥80%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#16a34a' }} /><span className="text-xs text-gray-700">65-80%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#84cc16' }} /><span className="text-xs text-gray-700">50-65%</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#e5e7eb' }} /><span className="text-xs text-gray-700">&lt;50%</span></div>
+                      </div>
+                    )}
+                    {demographicMetric === 'sushi_gap' && (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#0e7490' }} /><span className="text-xs text-gray-700">≥200</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#0891b2' }} /><span className="text-xs text-gray-700">100-200</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#22d3ee' }} /><span className="text-xs text-gray-700">50-100</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#a5f3fc' }} /><span className="text-xs text-gray-700">20-50</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: '#e5e7eb' }} /><span className="text-xs text-gray-700">&lt;20</span></div>
                       </div>
                     )}
                   </div>
@@ -1319,9 +1636,9 @@ export default function Slide3() {
               <>
                 {/* Strategic Metrics - show before district selection */}
                 {strategicMetrics && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Gen Z Hotspot Coverage */}
-                    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {/* Gen Z Hotspot Coverage - compact */}
+                    <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
                       <h3 className="font-serif text-sm text-[#1a1a1a] mb-3 flex items-center gap-2">
                         <Users className="w-4 h-4 text-[var(--accent-coral)]" />
                         Gen Z Hotspot Coverage
@@ -1368,8 +1685,8 @@ export default function Slide3() {
                       </div>
                     </div>
 
-                    {/* Primary Ethnicity Targeting */}
-                    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    {/* Primary Ethnicity Targeting - compact */}
+                    <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
                       <h3 className="font-serif text-sm text-[#1a1a1a] mb-3">Primary Ethnicity Targeting</h3>
                       <p className="text-xs text-gray-500 mb-3">
                         Most common ethnicity in districts where each brand operates
@@ -1402,9 +1719,9 @@ export default function Slide3() {
                       </div>
                     </div>
 
-                    {/* Empire Sushi Strategic Position */}
+                    {/* Empire Sushi Strategic Position - compact */}
                     {strategicMetrics.storesByBrand['Empire Sushi'] && (
-                      <div className="lg:col-span-2 bg-gradient-to-br from-[#fff5f2] to-white rounded-xl p-4 shadow-sm border border-[#ffb4a2]/30">
+                      <div className="bg-gradient-to-br from-[#fff5f2] to-white rounded-lg p-3 shadow-sm border border-[#ffb4a2]/30">
                         <h3 className="font-serif text-sm text-[#c62828] mb-3 flex items-center gap-2">
                           <TrendingUp className="w-4 h-4" />
                           Empire Sushi Strategic Position
@@ -1449,81 +1766,211 @@ export default function Slide3() {
                         </div>
                       </div>
                     )}
+
+                    {/* High-growth districts with competitor comparison */}
+                    {growthDistricts.length > 0 && (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setExpandedChart('demographics-growth-competitors')}
+                        onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('demographics-growth-competitors')}
+                        className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 ${expandableClass}`}
+                      >
+                        <h3 className="font-serif text-xs text-[#1a1a1a] mb-1.5 flex items-center gap-1.5">
+                          <TrendingUp className="w-3.5 h-3.5 text-[var(--accent-coral)]" />
+                          High-growth districts: Empire vs Competitors
+                        </h3>
+                        <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                          {growthDistricts.slice(0, 8).map((d) => (
+                            <div key={d.district} className="flex items-center justify-between text-[9px]">
+                              <span className="font-medium text-gray-700 truncate max-w-[100px]">{d.district}</span>
+                              <span className="text-green-600 font-semibold">+{d.growthPct.toFixed(1)}%</span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[#c62828] font-bold">{d.empireCount}</span>
+                                <span className="text-gray-400">/</span>
+                                <span className="text-gray-600">{d.totalCompetitors}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1.5 text-center">Empire stores / Total stores • Click to enlarge</p>
+                      </div>
+                    )}
+
+                    {/* Halal opportunity - small, click to enlarge */}
+                    {halalOpportunityDistricts.length > 0 && (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setExpandedChart('demographics-halal')}
+                        onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('demographics-halal')}
+                        className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 ${expandableClass}`}
+                      >
+                        <h3 className="font-serif text-xs text-[#1a1a1a] mb-1.5 flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-[var(--accent-coral)]" />
+                          Halal sushi opportunity
+                        </h3>
+                        <p className="text-[10px] text-gray-500 mb-2">≥70% Malay, ≤2 stores.</p>
+                        <div className="max-h-28 overflow-y-auto space-y-1">
+                          {halalOpportunityDistricts.slice(0, 5).map(({ district, state, malayPct, storeCount, sushiGap }) => (
+                            <div key={district} className="flex items-center justify-between py-1 px-2 rounded bg-gray-50 border border-gray-100 text-[10px]">
+                              <span className="font-medium text-gray-800 truncate max-w-[80px]">{district}</span>
+                              <span className="text-gray-500 shrink-0">{malayPct.toFixed(0)}%</span>
+                              <span className="text-cyan-700 shrink-0">Gap {sushiGap.toFixed(0)}</span>
+                            </div>
+                          ))}
+                          {halalOpportunityDistricts.length > 5 && (
+                            <p className="text-[10px] text-gray-500 pt-0.5">+{halalOpportunityDistricts.length - 5} more</p>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-0.5 text-center">Click to enlarge</p>
+                      </div>
+                    )}
+
+                    {/* Female Gen Z share - small, click to enlarge */}
+                    {femaleGenZByDistrict.length > 0 && (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setExpandedChart('demographics-female-genz')}
+                        onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('demographics-female-genz')}
+                        className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 ${expandableClass}`}
+                      >
+                        <h3 className="font-serif text-xs text-[#1a1a1a] mb-1.5 flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-[var(--accent-coral)]" />
+                          Female Gen Z share (10–24)
+                        </h3>
+                        <div className="space-y-1">
+                          {femaleGenZByDistrict.slice(0, 5).map((r) => (
+                            <div key={r.district} className="space-y-0.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-medium text-gray-800 truncate max-w-[100px]" title={r.district}>{r.district}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[9px] text-[var(--accent-coral)] font-semibold">{r.empireStoreCount} ES</span>
+                                  <span className="text-[9px] text-gray-500">/ {r.storeCount}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-12 text-right text-[10px] text-gray-600">{(100 - r.femalePct).toFixed(0)}%</div>
+                                <div className="flex-1 flex gap-0.5 h-3 rounded overflow-hidden bg-gray-100">
+                                  <div className="bg-[#2563eb]" style={{ width: `${100 - r.femalePct}%` }} title="Male" />
+                                  <div className="bg-[#ec4899]" style={{ width: `${r.femalePct}%` }} title="Female" />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {femaleGenZByDistrict.length > 5 && (
+                            <p className="text-[10px] text-gray-500">+{femaleGenZByDistrict.length - 5} more</p>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-0.5 text-center">Click to enlarge</p>
+                      </div>
+                    )}
+
+                    {/* Market potential score - small, click to enlarge */}
+                    {marketPotentialTopDistricts.length > 0 && (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setExpandedChart('demographics-market-potential')}
+                        onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('demographics-market-potential')}
+                        className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 ${expandableClass}`}
+                      >
+                        <h3 className="font-serif text-xs text-[#1a1a1a] mb-1.5 flex items-center gap-1.5">
+                          <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-coral)]" />
+                          Market potential (top 15)
+                        </h3>
+                        <div className="h-36">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                              data={marketPotentialTopDistricts}
+                              layout="vertical"
+                              margin={{ left: 4, right: 16, top: 2, bottom: 2 }}
+                            >
+                              <XAxis type="number" stroke="#999" tick={{ fontSize: 8 }} domain={[0, 100]} />
+                              <YAxis type="category" dataKey="district" width={70} tick={{ fontSize: 7 }} stroke="#999" />
+                              <Tooltip
+                                formatter={(value: number | string | undefined, name: string) => [value, name]}
+                                contentStyle={{ fontSize: 11 }}
+                                labelFormatter={(_, payload) => {
+                                  const p = payload?.[0]?.payload as { state?: string; district?: string };
+                                  return p ? `${p.district} (${p.state || ''})` : '';
+                                }}
+                              />
+                              <Bar dataKey="score" name="Score" fill="#0891b2" radius={[0, 3, 3, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-0.5 text-center">Click to enlarge</p>
+                      </div>
+                    )}
                   </div>
                 )}
-                
-                <div className="flex-1 flex items-center justify-center">
-                <div className="text-center max-w-md">
-                  <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="font-serif text-lg text-gray-600 mb-2">Select a district</h3>
-                  <p className="text-sm text-gray-500">
-                    Click on a district on the map or use the dropdown above to view demographic insights
-                  </p>
-                </div>
-              </div>
               </>
             ) : districtDemographics ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0">
                 {/* Left column */}
-                <div className="flex flex-col gap-4 min-h-0">
-                  {/* Overview card */}
-                  <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                    <h3 className="font-serif text-lg text-[#1a1a1a] mb-1">{selectedDistrict}</h3>
-                    <p className="text-xs text-gray-500 mb-3">{districtDemographics.state}</p>
+                <div className="flex flex-col gap-3 min-h-0">
+                  {/* Overview card - compact */}
+                  <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+                    <h3 className="font-serif text-base text-[#1a1a1a] mb-0.5">{selectedDistrict}</h3>
+                    <p className="text-xs text-gray-500 mb-2">{districtDemographics.state}</p>
                     <div className="flex items-baseline gap-2">
-                      <Users className="w-5 h-5 text-[var(--accent-coral)]" />
-                      <span className="text-3xl font-bold text-[#1a1a1a]">
+                      <Users className="w-4 h-4 text-[var(--accent-coral)]" />
+                      <span className="text-2xl font-bold text-[#1a1a1a]">
                         {districtDemographics.totalPop.toFixed(1)}k
                       </span>
-                      <span className="text-sm text-gray-500">population (2024)</span>
+                      <span className="text-xs text-gray-500">population (2024)</span>
                     </div>
                   </div>
 
-                  {/* Population trend */}
+                  {/* Population trend - small, click to enlarge */}
                   {districtDemographics.trendData.length > 1 && (
-                    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                      <h3 className="font-serif text-sm text-[#1a1a1a] mb-2 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-[var(--accent-coral)]" />
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setExpandedChart('district-trend')}
+                      onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('district-trend')}
+                      className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 ${expandableClass}`}
+                    >
+                      <h3 className="font-serif text-xs text-[#1a1a1a] mb-1 flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5 text-[var(--accent-coral)]" />
                         Population trend
                       </h3>
-                      <ResponsiveContainer width="100%" height={160}>
-                        <LineChart data={districtDemographics.trendData} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
-                          <XAxis dataKey="year" stroke="#999" tick={{ fontSize: 10 }} />
-                          <YAxis stroke="#999" tick={{ fontSize: 10 }} />
+                      <ResponsiveContainer width="100%" height={90}>
+                        <LineChart data={districtDemographics.trendData} margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
+                          <XAxis dataKey="year" stroke="#999" tick={{ fontSize: 8 }} />
+                          <YAxis stroke="#999" tick={{ fontSize: 8 }} width={28} />
                           <Tooltip 
                             formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}k` : '', 'Population']}
-                            labelStyle={{ fontSize: 12 }}
                             contentStyle={{ fontSize: 11 }}
                           />
                           <Line 
                             type="monotone" 
                             dataKey="population" 
                             stroke={EMPIRE_RED} 
-                            strokeWidth={2}
-                            dot={{ fill: EMPIRE_RED, r: 4 }}
+                            strokeWidth={1.5}
+                            dot={{ fill: EMPIRE_RED, r: 2 }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
-                      {districtDemographics.trendData.length >= 2 && (
-                        <p className="text-xs text-gray-500 mt-2">
-                          Growth: {(
-                            ((districtDemographics.trendData[districtDemographics.trendData.length - 1].population - 
-                              districtDemographics.trendData[0].population) / 
-                              districtDemographics.trendData[0].population * 100)
-                          ).toFixed(1)}% 
-                          ({districtDemographics.trendData[0].year}–{districtDemographics.trendData[districtDemographics.trendData.length - 1].year})
-                        </p>
-                      )}
+                      <p className="text-[10px] text-gray-500 mt-0.5 text-center">Click to enlarge</p>
                     </div>
                   )}
 
-                  {/* Ethnicity breakdown */}
-                  <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                    <h3 className="font-serif text-sm text-[#1a1a1a] mb-3 flex items-center gap-2">
-                      <PieIcon className="w-4 h-4 text-[var(--accent-coral)]" />
+                  {/* Ethnicity breakdown - small, click to enlarge */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setExpandedChart('district-ethnicity-pie')}
+                    onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('district-ethnicity-pie')}
+                    className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 ${expandableClass}`}
+                  >
+                    <h3 className="font-serif text-xs text-[#1a1a1a] mb-2 flex items-center gap-1.5">
+                      <PieIcon className="w-3.5 h-3.5 text-[var(--accent-coral)]" />
                       Ethnicity breakdown
                     </h3>
-                    <ResponsiveContainer width="100%" height={180}>
+                    <ResponsiveContainer width="100%" height={100}>
                       <PieChart>
                         <Pie
                           data={districtDemographics.ethnicityData}
@@ -1531,8 +1978,8 @@ export default function Slide3() {
                           nameKey="name"
                           cx="50%"
                           cy="50%"
-                          innerRadius={40}
-                          outerRadius={65}
+                          innerRadius={22}
+                          outerRadius={38}
                           paddingAngle={2}
                           label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`}
                         >
@@ -1549,59 +1996,67 @@ export default function Slide3() {
                         />
                       </PieChart>
                     </ResponsiveContainer>
+                    <p className="text-[10px] text-gray-500 mt-0.5 text-center">Click to enlarge</p>
                   </div>
                 </div>
 
                 {/* Right column */}
-                <div className="flex flex-col gap-4 min-h-0">
-                  {/* Age distribution */}
-                  <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                    <h3 className="font-serif text-sm text-[#1a1a1a] mb-3 flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4 text-[var(--accent-coral)]" />
+                <div className="flex flex-col gap-3 min-h-0">
+                  {/* Age distribution - small, click to enlarge */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setExpandedChart('district-age')}
+                    onKeyDown={(e) => e.key === 'Enter' && setExpandedChart('district-age')}
+                    className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 ${expandableClass}`}
+                  >
+                    <h3 className="font-serif text-xs text-[#1a1a1a] mb-2 flex items-center gap-1.5">
+                      <BarChart3 className="w-3.5 h-3.5 text-[var(--accent-coral)]" />
                       Age distribution
                     </h3>
-                    <div className="max-h-80 overflow-y-auto">
-                      <ResponsiveContainer width="100%" height={Math.max(200, districtDemographics.ageData.length * 22)}>
-                        <BarChart data={districtDemographics.ageData} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
-                          <XAxis type="number" stroke="#999" tick={{ fontSize: 9 }} />
-                          <YAxis type="category" dataKey="age" width={45} tick={{ fontSize: 9 }} stroke="#999" />
+                    <div className="max-h-32 overflow-y-auto">
+                      <ResponsiveContainer width="100%" height={Math.max(100, districtDemographics.ageData.length * 16)}>
+                        <BarChart data={districtDemographics.ageData} layout="vertical" margin={{ left: 8, right: 8, top: 4, bottom: 4 }}>
+                          <XAxis type="number" stroke="#999" tick={{ fontSize: 8 }} />
+                          <YAxis type="category" dataKey="age" width={36} tick={{ fontSize: 8 }} stroke="#999" />
                           <Tooltip 
                             formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}k` : '', 'Population']}
                             contentStyle={{ fontSize: 11 }}
                           />
-                          <Bar dataKey="population" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                          <Bar dataKey="population" fill="#2563eb" radius={[0, 3, 3, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
+                    <p className="text-[10px] text-gray-500 mt-0.5 text-center">Click to enlarge</p>
                   </div>
 
-                  {/* Ethnicity details table */}
-                  <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                    <h3 className="font-serif text-sm text-[#1a1a1a] mb-2">Detailed breakdown</h3>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {/* Ethnicity details table - compact */}
+                  <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+                    <h3 className="font-serif text-xs text-[#1a1a1a] mb-1.5">Detailed breakdown</h3>
+                    <div className="space-y-1 max-h-36 overflow-y-auto">
                       {districtDemographics.ethnicityData.map((eth) => (
-                        <div key={eth.name} className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                        <div key={eth.name} className="flex justify-between items-center py-1 border-b border-gray-50">
                           <span className="text-xs font-medium text-gray-700 capitalize">{eth.name}</span>
                           <div className="text-right">
-                            <div className="text-sm font-semibold text-gray-800">{eth.value.toFixed(1)}k</div>
-                            <div className="text-xs text-gray-500">{eth.pct.toFixed(1)}%</div>
+                            <span className="text-xs font-semibold text-gray-800">{eth.value.toFixed(1)}k</span>
+                            <span className="text-xs text-gray-500 ml-1">({eth.pct.toFixed(1)}%)</span>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* Insights card */}
-                  <div className="bg-[#fff5f2] rounded-xl p-3 border border-[#ffb4a2]/30">
-                    <p className="text-xs font-medium text-[#c62828] uppercase tracking-wider mb-1">Demographics Insight</p>
-                    <p className="text-xs text-gray-700 font-light">
+                  {/* Insights card - compact */}
+                  <div className="bg-[#fff5f2] rounded-lg p-2.5 border border-[#ffb4a2]/30">
+                    <p className="text-[10px] font-medium text-[#c62828] uppercase tracking-wider mb-0.5">Demographics Insight</p>
+                    <p className="text-[11px] text-gray-700 font-light">
                       {districtDemographics.ethnicityData.length > 0 && (
                         <>
                           <strong className="text-[#c62828]">{districtDemographics.ethnicityData[0].name}</strong> is the largest ethnic group 
                           ({districtDemographics.ethnicityData[0].pct.toFixed(1)}%). 
                         </>
                       )}
-                      {' '}Click on other districts to compare demographics.
+                      {' '}Click charts to enlarge.
                     </p>
                   </div>
                 </div>
@@ -1646,6 +2101,14 @@ export default function Slide3() {
                 {expandedChart === 'saturation' && 'Saturation Score'}
                 {expandedChart === 'contested-stores' && 'Top 5 Most Contested Stores'}
                 {expandedChart === 'focus-brand' && 'Focus Brand'}
+                {expandedChart === 'district-trend' && `Population trend – ${selectedDistrict}`}
+                {expandedChart === 'district-ethnicity-pie' && `Ethnicity breakdown – ${selectedDistrict}`}
+                {expandedChart === 'district-age' && `Age distribution – ${selectedDistrict}`}
+                {expandedChart === 'demographics-growth' && 'Highest growing districts (2020 → 2024)'}
+                {expandedChart === 'demographics-growth-competitors' && 'High-growth districts: Empire vs Competitors (2020 → 2024)'}
+                {expandedChart === 'demographics-halal' && 'Halal sushi opportunity'}
+                {expandedChart === 'demographics-female-genz' && 'Female Gen Z share (10–24) – top 10 target districts'}
+                {expandedChart === 'demographics-market-potential' && 'Market potential score (top 15)'}
               </h3>
               <button
                 type="button"
@@ -1843,6 +2306,247 @@ export default function Slide3() {
                     <strong className="text-[#c62828]">{selectedBrand}</strong> is highlighted on the map. Use the choropleth dropdown to compare district-level Population, Income per capita, or Income.
                   </p>
                   <p className="text-gray-500 mt-4">Switch to the District Demographics tab to view Gen Z hotspots and ethnicity-based insights.</p>
+                </div>
+              )}
+              {expandedChart === 'district-trend' && districtDemographics && districtDemographics.trendData.length > 1 && (
+                <div className="w-full">
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={districtDemographics.trendData} margin={{ left: 0, right: 16, top: 8, bottom: 8 }}>
+                      <XAxis dataKey="year" stroke="#999" tick={{ fontSize: 12 }} />
+                      <YAxis stroke="#999" tick={{ fontSize: 12 }} />
+                      <Tooltip 
+                        formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}k` : '', 'Population']}
+                        contentStyle={{ fontSize: 12 }}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="population" 
+                        stroke={EMPIRE_RED} 
+                        strokeWidth={2}
+                        dot={{ fill: EMPIRE_RED, r: 5 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  {districtDemographics.trendData.length >= 2 && (
+                    <p className="text-sm text-gray-500 mt-4">
+                      Growth: {(
+                        ((districtDemographics.trendData[districtDemographics.trendData.length - 1].population - 
+                          districtDemographics.trendData[0].population) / 
+                          districtDemographics.trendData[0].population * 100)
+                      ).toFixed(1)}% 
+                      ({districtDemographics.trendData[0].year}–{districtDemographics.trendData[districtDemographics.trendData.length - 1].year})
+                    </p>
+                  )}
+                </div>
+              )}
+              {expandedChart === 'district-ethnicity-pie' && districtDemographics && (
+                <ResponsiveContainer width="100%" height={450}>
+                  <PieChart>
+                    <Pie
+                      data={districtDemographics.ethnicityData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={140}
+                      paddingAngle={2}
+                      label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                    >
+                      {districtDemographics.ethnicityData.map((_, i) => (
+                        <Cell 
+                          key={i} 
+                          fill={['#c62828', '#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#0891b2'][i % 6]} 
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}k` : '', 'Population']}
+                      contentStyle={{ fontSize: 12 }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+              {expandedChart === 'district-age' && districtDemographics && (
+                <div className="w-full">
+                  <ResponsiveContainer width="100%" height={Math.min(500, Math.max(300, districtDemographics.ageData.length * 28))}>
+                    <BarChart data={districtDemographics.ageData} layout="vertical" margin={{ left: 12, right: 16, top: 8, bottom: 8 }}>
+                      <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} />
+                      <YAxis type="category" dataKey="age" width={50} tick={{ fontSize: 11 }} stroke="#999" />
+                      <Tooltip 
+                        formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}k` : '', 'Population']}
+                        contentStyle={{ fontSize: 12 }}
+                      />
+                      <Bar dataKey="population" fill="#2563eb" radius={[0, 6, 6, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+              {expandedChart === 'demographics-growth' && districtPopulationGrowth.length > 0 && (
+                <ResponsiveContainer width="100%" height={500}>
+                  <BarChart data={districtPopulationGrowth} layout="vertical" margin={{ left: 12, right: 24, top: 8, bottom: 8 }}>
+                    <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} unit="%" />
+                    <YAxis type="category" dataKey="district" width={110} tick={{ fontSize: 11 }} stroke="#999" />
+                    <Tooltip formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}%` : '', 'Growth']} contentStyle={{ fontSize: 12 }} labelFormatter={(_, payload) => payload?.[0]?.payload?.state ? `${payload[0].payload.district} (${payload[0].payload.state})` : ''} />
+                    <Bar dataKey="growthPct" name="Growth %" fill="#16a34a" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              {expandedChart === 'demographics-growth-competitors' && growthDistricts.length > 0 && (
+                <div className="space-y-6" style={{ minHeight: '70vh' }}>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-sm text-gray-800 mb-2">Summary</h4>
+                    <div className="grid grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Top 30 high-growth districts</p>
+                        <p className="text-2xl font-bold text-green-600">{growthDistricts.length}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Empire presence</p>
+                        <p className="text-2xl font-bold text-[#c62828]">
+                          {growthDistricts.filter(d => d.empireCount > 0).length} districts
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Total Empire stores</p>
+                        <p className="text-2xl font-bold text-[#c62828]">
+                          {growthDistricts.reduce((sum, d) => sum + d.empireCount, 0)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Opportunities</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          {growthDistricts.filter(d => d.empireCount === 0 && d.totalCompetitors > 0).length} gaps
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div style={{ width: '100%', height: '600px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart 
+                        data={growthDistricts.slice(0, 20)} 
+                        layout="vertical" 
+                        margin={{ left: 120, right: 40, top: 8, bottom: 8 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                        <XAxis type="number" stroke="#999" tick={{ fontSize: 11 }} />
+                        <YAxis 
+                          type="category" 
+                          dataKey="district" 
+                          width={110} 
+                          tick={{ fontSize: 11 }} 
+                          stroke="#999" 
+                        />
+                        <Tooltip 
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length > 0) {
+                              const data = payload[0].payload as GrowthDistrictData;
+                              return (
+                                <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
+                                  <p className="font-bold text-gray-800 mb-2">{data.district}</p>
+                                  <p className="text-sm text-green-600 font-semibold mb-2">Growth: +{data.growthPct.toFixed(1)}%</p>
+                                  <p className="text-xs text-gray-600 mb-1">Population: {(data.pop2020/1000).toFixed(0)}k → {(data.pop2024/1000).toFixed(0)}k</p>
+                                  <div className="border-t border-gray-200 mt-2 pt-2 space-y-1 text-xs">
+                                    <p className="text-[#c62828] font-semibold">Empire: {data.empireCount}</p>
+                                    <p className="text-gray-700">Sushi King: {data.sushiKingCount}</p>
+                                    <p className="text-gray-700">Family Mart: {data.familyMartCount}</p>
+                                    <p className="text-gray-700">Sushi Zanmai: {data.sushiZanmaiCount}</p>
+                                    <p className="text-gray-700">Others: {data.sushiJiroCount + data.sushiPlusCount}</p>
+                                    <p className="font-semibold text-gray-800 pt-1 border-t">Total: {data.totalCompetitors}</p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="empireCount" name="Empire Sushi" fill="#c62828" stackId="stores" />
+                        <Bar dataKey="sushiKingCount" name="Sushi King" fill="#8a9b6b" stackId="stores" />
+                        <Bar dataKey="familyMartCount" name="Family Mart" fill="#a88b9c" stackId="stores" />
+                        <Bar dataKey="sushiZanmaiCount" name="Sushi Zanmai" fill="#7a9ba8" stackId="stores" />
+                        <Bar 
+                          dataKey={(data: GrowthDistrictData) => data.sushiJiroCount + data.sushiPlusCount} 
+                          name="Others" 
+                          fill="#94a3b8" 
+                          stackId="stores" 
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h4 className="font-semibold text-sm text-blue-900 mb-2">💡 Key Insights</h4>
+                    <ul className="space-y-1.5 text-sm text-blue-800">
+                      <li>• Only {growthDistricts.filter(d => d.empireCount > 0).length} of top 30 high-growth districts have Empire presence</li>
+                      <li>• {growthDistricts.filter(d => d.empireCount === 0 && d.totalCompetitors > 0).length} high-growth districts have competitors but NO Empire stores</li>
+                      <li>• Top opportunities: {growthDistricts
+                          .filter(d => d.empireCount === 0 && d.totalCompetitors >= 2)
+                          .slice(0, 3)
+                          .map(d => d.district)
+                          .join(', ')}</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+              {expandedChart === 'demographics-halal' && (
+                <div className="max-w-2xl space-y-3">
+                  <p className="text-sm text-gray-600">Districts with ≥70% Malay and ≤2 sushi stores.</p>
+                  <div className="max-h-[60vh] overflow-y-auto space-y-2">
+                    {halalOpportunityDistricts.map(({ district, state, malayPct, storeCount, sushiGap }) => (
+                      <div key={district} className="flex items-center justify-between py-3 px-4 rounded-xl bg-gray-50 border border-gray-100">
+                        <span className="text-sm font-medium text-gray-800">{district}</span>
+                        <span className="text-sm text-gray-500">{state}</span>
+                        <span className="text-sm text-green-700 font-medium">{malayPct.toFixed(0)}% Malay</span>
+                        <span className="text-sm text-gray-600">{storeCount} stores</span>
+                        <span className="text-sm text-cyan-700">Gap {sushiGap.toFixed(0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {expandedChart === 'demographics-female-genz' && (
+                <div className="max-w-3xl space-y-4">
+                  <p className="text-sm text-gray-600">Higher female ratio often correlates with snack-sushi frequency in grab-and-go.</p>
+                  <div className="space-y-3">
+                    {femaleGenZByDistrict.map((r) => (
+                      <div key={r.district} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-gray-800">{r.district}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-[var(--accent-coral)] font-semibold">
+                              {r.empireStoreCount} Empire Sushi
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {r.storeCount} total {r.storeCount === 1 ? 'store' : 'stores'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="w-16 text-right text-sm text-gray-600">{(100 - r.femalePct).toFixed(0)}% M</div>
+                          <div className="flex-1 flex gap-0.5 h-6 rounded overflow-hidden bg-gray-100">
+                            <div className="bg-[#2563eb]" style={{ width: `${100 - r.femalePct}%` }} title="Male" />
+                            <div className="bg-[#ec4899]" style={{ width: `${r.femalePct}%` }} title="Female" />
+                          </div>
+                          <div className="w-16 text-sm text-gray-600">{r.femalePct.toFixed(0)}% F</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {expandedChart === 'demographics-market-potential' && marketPotentialTopDistricts.length > 0 && (
+                <div className="w-full">
+                  <p className="text-sm text-gray-600 mb-4">Weighted: growth + Gen Z % + sushi gap + female Gen Z share.</p>
+                  <ResponsiveContainer width="100%" height={500}>
+                    <BarChart data={marketPotentialTopDistricts} layout="vertical" margin={{ left: 12, right: 24, top: 8, bottom: 8 }}>
+                      <XAxis type="number" stroke="#999" tick={{ fontSize: 12 }} domain={[0, 100]} />
+                      <YAxis type="category" dataKey="district" width={110} tick={{ fontSize: 11 }} stroke="#999" />
+                      <Tooltip formatter={(value: number | string | undefined, name: string) => [value, name]} contentStyle={{ fontSize: 12 }} labelFormatter={(_, payload) => { const p = payload?.[0]?.payload as { state?: string; district?: string }; return p ? `${p.district} (${p.state || ''})` : ''; }} />
+                      <Bar dataKey="score" name="Score" fill="#0891b2" radius={[0, 6, 6, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               )}
             </div>
