@@ -1534,7 +1534,7 @@ export default function Slide3() {
                           innerRadius={40}
                           outerRadius={65}
                           paddingAngle={2}
-                          label={({ name, pct }) => `${name} ${pct.toFixed(0)}%`}
+                          label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`}
                         >
                           {districtDemographics.ethnicityData.map((_, i) => (
                             <Cell 
