@@ -1491,7 +1491,7 @@ export default function Slide3() {
                           <XAxis dataKey="year" stroke="#999" tick={{ fontSize: 10 }} />
                           <YAxis stroke="#999" tick={{ fontSize: 10 }} />
                           <Tooltip 
-                            formatter={(value: number) => [`${value.toFixed(1)}k`, 'Population']}
+                            formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}k` : '', 'Population']}
                             labelStyle={{ fontSize: 12 }}
                             contentStyle={{ fontSize: 11 }}
                           />
@@ -1544,7 +1544,7 @@ export default function Slide3() {
                           ))}
                         </Pie>
                         <Tooltip 
-                          formatter={(value: number) => [`${value.toFixed(1)}k`, 'Population']}
+                          formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}k` : '', 'Population']}
                           contentStyle={{ fontSize: 11 }}
                         />
                       </PieChart>
@@ -1566,7 +1566,7 @@ export default function Slide3() {
                           <XAxis type="number" stroke="#999" tick={{ fontSize: 9 }} />
                           <YAxis type="category" dataKey="age" width={45} tick={{ fontSize: 9 }} stroke="#999" />
                           <Tooltip 
-                            formatter={(value: number) => [`${value.toFixed(1)}k`, 'Population']}
+                            formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}k` : '', 'Population']}
                             contentStyle={{ fontSize: 11 }}
                           />
                           <Bar dataKey="population" fill="#2563eb" radius={[0, 4, 4, 0]} />
